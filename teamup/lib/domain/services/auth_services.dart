@@ -1,4 +1,3 @@
-/// Solo define la intención; la UI no conoce Supabase.
  
 abstract class AuthService {
   Future<String> signUp({
@@ -16,6 +15,6 @@ abstract class AuthService {
 
   Future<void> refreshSession();
 
-  /// Devuelve el userId actual, o null si no hay sesión
+ 
   String? currentUserId();
 }

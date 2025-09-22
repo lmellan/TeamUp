@@ -7,7 +7,10 @@ class ProfileServiceSupabase implements ProfileService {
   final SupabaseClient _c;
   ProfileServiceSupabase([SupabaseClient? client]) : _c = client ?? supa();
 
-  Profile _fromRow(String uid, Map<String, dynamic> m) => Profile(
+  static const _table = 'perfil';
+
+ 
+  Profile _fromRowWithUid(String uid, Map<String, dynamic> m) => Profile(
         id: uid,
         name: (m['name'] as String?)?.trim(),
         bio: (m['descripcion'] as String?)?.trim(),
@@ -18,15 +21,19 @@ class ProfileServiceSupabase implements ProfileService {
             .map((e) => e.toString())
             .toList(),
       );
+ 
+  Profile _fromRow(Map<String, dynamic> m) =>
+      _fromRowWithUid((m['id'] ?? '').toString(), m);
 
   Map<String, dynamic> _toRow(Profile p) => {
         'name': (p.name?.trim().isEmpty ?? true) ? null : p.name!.trim(),
         'descripcion': (p.bio?.trim().isEmpty ?? true) ? null : p.bio!.trim(),
         'foto': (p.avatarUrl?.trim().isEmpty ?? true) ? null : p.avatarUrl!.trim(),
-        'location': (p.locationLabel?.trim().isEmpty ?? true) ? null : p.locationLabel!.trim(),
+        'location':
+            (p.locationLabel?.trim().isEmpty ?? true) ? null : p.locationLabel!.trim(),
         'notify_new_activity': p.notifyNewActivity,
         'preferred_sport_ids': p.preferredSportIds,
-        'updated_at': DateTime.now().toIso8601String(),
+        'updated_at': DateTime.now().toUtc().toIso8601String(),
       };
 
   @override
@@ -34,13 +41,14 @@ class ProfileServiceSupabase implements ProfileService {
     final uid = _c.auth.currentUser?.id;
     if (uid == null) return null;
 
-    final row = await _c.from('perfil').select('''
-      name, descripcion, foto, location,
-      preferred_sport_ids, notify_new_activity
-    ''').eq('id', uid).maybeSingle();
+    final row = await _c
+        .from(_table)
+        .select('name, descripcion, foto, location, preferred_sport_ids, notify_new_activity')
+        .eq('id', uid)
+        .maybeSingle();
 
     if (row == null) return null;
-    return _fromRow(uid, Map<String, dynamic>.from(row));
+    return _fromRowWithUid(uid, Map<String, dynamic>.from(row));
   }
 
   @override
@@ -48,9 +56,34 @@ class ProfileServiceSupabase implements ProfileService {
     final uid = _c.auth.currentUser?.id;
     if (uid == null) throw StateError('No hay sesión activa');
 
-    await _c.from('perfil').upsert({
+    await _c.from(_table).upsert({
       'id': uid,
       ..._toRow(p),
     });
+  }
+
+  @override
+  Future<Profile?> getById(String id) async {
+    final row = await _c
+        .from(_table)
+        .select('id, name, descripcion, foto, location, preferred_sport_ids, notify_new_activity')
+        .eq('id', id)
+        .maybeSingle();
+
+    if (row == null) return null;
+    return _fromRow(Map<String, dynamic>.from(row));
+  }
+
+  @override
+  Future<List<Profile>> listByIds(List<String> ids) async {
+    if (ids.isEmpty) return [];
+    final rows = await _c
+        .from(_table)
+        .select('id, name, descripcion, foto, location, preferred_sport_ids, notify_new_activity')
+        .inFilter('id', ids);
+
+    return List<Map<String, dynamic>>.from(rows as List)
+        .map<Profile>((e) => _fromRow(Map<String, dynamic>.from(e)))
+        .toList();
   }
 }

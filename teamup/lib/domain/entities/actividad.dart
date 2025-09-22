@@ -1,6 +1,6 @@
 class Activity {
   final String id;
-  final DateTime dateUtc;    
+  final DateTime dateUtc;
   final String sportId;
   final String status;
  
@@ -8,6 +8,8 @@ class Activity {
   final String? description;
   final String? placeName;
   final String? formattedAddress;
+  final String? creatorId;
+  final int? maxPlayers;
 
   const Activity({
     required this.id,
@@ -18,5 +20,7 @@ class Activity {
     this.description,
     this.placeName,
     this.formattedAddress,
+    this.creatorId,
+    this.maxPlayers,
   });
 }

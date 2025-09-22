@@ -459,6 +459,13 @@ class _ExploreScreenState extends State<ExploreScreen> {
                       title: title,
                       datetime: DateFormat('dd/MM/yyyy, h:mm a').format(dt),
                       place: place.isEmpty ? null : place,
+                      onTap: () {
+                        Navigator.pushNamed(
+                          context,
+                          '/detail-activity',
+                          arguments: a.id, // 👈 pasamos el id
+                        );
+                      },
                     ),
                   );
                 },
@@ -530,11 +537,14 @@ class _FilterPill extends StatelessWidget {
 class _ExploreCard extends StatelessWidget {
   final String category, title, datetime;
   final String? place;
+  final VoidCallback? onTap; // 👈 nuevo
+
   const _ExploreCard({
     required this.category,
     required this.title,
     required this.datetime,
     this.place,
+    this.onTap, // 👈 nuevo
   });
 
   @override
@@ -545,65 +555,73 @@ class _ExploreCard extends StatelessWidget {
         ? Colors.white70
         : const Color(0xFF6B7280);
 
-    return Container(
-      decoration: BoxDecoration(
-        color: Theme.of(context).brightness == Brightness.dark
-            ? const Color(0xFF2B2B2B)
-            : cs.surface,
+    // Usamos Material + InkWell para ripple y bordes redondeados
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: Theme.of(context).brightness == Brightness.dark
-              ? const Color(0xFF44473E)
-              : cs.outline.withOpacity(0.2),
-        ),
-        boxShadow: [
-          BoxShadow(
-            blurRadius: 10,
-            spreadRadius: 0,
-            offset: const Offset(0, 2),
-            color: Colors.black.withOpacity(
-              Theme.of(context).brightness == Brightness.dark ? 0.25 : 0.06,
+        onTap: onTap, // 👈 navega cuando se toca
+        child: Container(
+          decoration: BoxDecoration(
+            color: Theme.of(context).brightness == Brightness.dark
+                ? const Color(0xFF2B2B2B)
+                : cs.surface,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: Theme.of(context).brightness == Brightness.dark
+                  ? const Color(0xFF44473E)
+                  : cs.outline.withOpacity(0.2),
             ),
-          )
-        ],
-      ),
-      padding: const EdgeInsets.all(12),
-      child: Row(
-        children: [
-          // Thumbnail simple
-          Container(
-            width: 96,
-            height: 96,
-            decoration: BoxDecoration(
-              color: cs.primaryContainer.withOpacity(0.5),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(Icons.image, color: cs.onPrimaryContainer, size: 28),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(category, style: t.labelMedium?.copyWith(color: muted)),
-                const SizedBox(height: 2),
-                Text(
-                  title,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: t.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+            boxShadow: [
+              BoxShadow(
+                blurRadius: 10,
+                spreadRadius: 0,
+                offset: const Offset(0, 2),
+                color: Colors.black.withOpacity(
+                  Theme.of(context).brightness == Brightness.dark ? 0.25 : 0.06,
                 ),
-                const SizedBox(height: 2),
-                Text(datetime, style: t.bodySmall?.copyWith(color: muted)),
-                if (place != null && place!.isNotEmpty) ...[
-                  const SizedBox(height: 2),
-                  Text(place!, style: t.bodySmall?.copyWith(color: muted)),
-                ],
-              ],
-            ),
+              )
+            ],
           ),
-        ],
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              Container(
+                width: 96,
+                height: 96,
+                decoration: BoxDecoration(
+                  color: cs.primaryContainer.withOpacity(0.5),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(Icons.image, color: cs.onPrimaryContainer, size: 28),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(category, style: t.labelMedium?.copyWith(color: muted)),
+                    const SizedBox(height: 2),
+                    Text(
+                      title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: t.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(datetime, style: t.bodySmall?.copyWith(color: muted)),
+                    if (place != null && place!.isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(place!, style: t.bodySmall?.copyWith(color: muted)),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
-    );
+    ); 
   }
 }

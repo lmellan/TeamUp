@@ -13,4 +13,6 @@ abstract class ActivityService {
   });
  
   Future<List<Activity>> listByIds(List<String> ids, {bool ascending = true});
+  Future<Activity?> getById(String id);   
+
 }
