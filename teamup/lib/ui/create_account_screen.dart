@@ -1,5 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+ 
+import '../../domain/entities/perfil.dart';
+import '../../domain/services/auth_services.dart';
+import '../../domain/services/perfil_services.dart';
+ 
+import '../../data/auth_data.dart';    
+import '../../data/perfil_data.dart';   
 
 class CreateAccountScreen extends StatefulWidget {
   const CreateAccountScreen({super.key});
@@ -19,7 +25,11 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
   bool _obscure1 = true;
   bool _obscure2 = true;
   String? _error;
-  bool _acceptedTerms = true;  
+  bool _acceptedTerms = true;
+
+  // Inyección simple (si luego usas Riverpod/Provider, reemplázalo por providers)
+  final AuthService _auth = AuthServiceSupabase();
+  final ProfileService _profiles = ProfileServiceSupabase();
 
   @override
   void dispose() {
@@ -34,45 +44,33 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
     if (!_formKey.currentState!.validate()) return;
     setState(() { _loading = true; _error = null; });
 
-    final supa = Supabase.instance.client;
-
     try {
-      final res = await supa.auth.signUp(
+      // 1) Crear usuario (Auth)
+      final userId = await _auth.signUp(
         email: _email.text.trim(),
         password: _password.text,
-        data: {
-          'name': _name.text.trim(),  
-        },
+        name: _name.text.trim(),
       );
 
-      final user = res.user;
-      if (user == null) {
-        throw Exception('No se pudo crear el usuario');
-      }
+      // 2) Crear/actualizar perfil en tabla 'perfil'
+      final profile = Profile(
+        id: userId,
+        name: _name.text.trim(),
+        // bio/notify/preferredSports quedan por defecto
+      );
+      await _profiles.updateMyProfile(profile);
 
-      // Crear/asegurar registro en tu tabla profiles
-      await supa.from('perfil').upsert({
-        'id': user.id,
-        'name': _name.text.trim(),
- 
-      });
-
-      if (mounted) {
-        Navigator.of(context).pushReplacementNamed('/home');
-      }
-    } on AuthException catch (e, st) {
-      setState(() => _error = e.message.isNotEmpty
-          ? e.message
-          : 'Error de autenticación (${e.statusCode ?? 'desconocido'})');
-      debugPrint('AuthException ⇒ status:${e.statusCode} msg:${e.message}\n$st');
+      if (!mounted) return;
+      Navigator.of(context).pushReplacementNamed('/complete-perfil');
     } catch (e, st) {
-      setState(() => _error = 'Error inesperado: $e');
-      debugPrint('Unexpected error in _createAccount ⇒ $e\n$st');
+      setState(() => _error = e.toString().replaceFirst('Exception: ', ''));
+      // opcional: log
+      // ignore: avoid_print
+      print('CreateAccount error ⇒ $e\n$st');
     } finally {
       if (mounted) setState(() => _loading = false);
     }
   }
-
 
   @override
   Widget build(BuildContext context) {
@@ -123,12 +121,8 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
                             border: OutlineInputBorder(),
                           ),
                           validator: (v) {
-                            if (v == null || v.trim().isEmpty) {
-                              return 'Ingresa tu nombre';
-                            }
-                            if (v.trim().length < 2) {
-                              return 'Nombre demasiado corto';
-                            }
+                            if (v == null || v.trim().isEmpty) return 'Ingresa tu nombre';
+                            if (v.trim().length < 2) return 'Nombre demasiado corto';
                             return null;
                           },
                         ),
@@ -144,12 +138,8 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
                             border: OutlineInputBorder(),
                           ),
                           validator: (v) {
-                            if (v == null || v.trim().isEmpty) {
-                              return 'Ingresa tu correo';
-                            }
-                            if (!v.contains('@')) {
-                              return 'Correo inválido';
-                            }
+                            if (v == null || v.trim().isEmpty) return 'Ingresa tu correo';
+                            if (!v.contains('@')) return 'Correo inválido';
                             return null;
                           },
                         ),
@@ -170,12 +160,8 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
                             ),
                           ),
                           validator: (v) {
-                            if (v == null || v.isEmpty) {
-                              return 'Ingresa una contraseña';
-                            }
-                            if (v.length < 6) {
-                              return 'Debe tener al menos 6 caracteres';
-                            }
+                            if (v == null || v.isEmpty) return 'Ingresa una contraseña';
+                            if (v.length < 6) return 'Debe tener al menos 6 caracteres';
                             return null;
                           },
                         ),
@@ -196,15 +182,13 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
                             ),
                           ),
                           validator: (v) {
-                            if (v != _password.text) {
-                              return 'Las contraseñas no coinciden';
-                            }
+                            if (v != _password.text) return 'Las contraseñas no coinciden';
                             return null;
                           },
                         ),
                         const SizedBox(height: 8),
 
-                        // Términos (opcional)
+                        // Términos
                         Row(
                           children: [
                             Checkbox(
@@ -256,9 +240,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
                   const SizedBox(height: 16),
 
                   TextButton.icon(
-                    onPressed: _loading
-                        ? null
-                        : () => Navigator.of(context).pop(), // volver al login
+                    onPressed: _loading ? null : () => Navigator.of(context).pop(),
                     icon: const Icon(Icons.arrow_back),
                     label: const Text('Ya tengo una cuenta — Iniciar sesión'),
                   ),

@@ -1,6 +1,7 @@
+ 
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
-import 'create_account_screen.dart';
+import '../../domain/services/auth_services.dart';
+import '../../data/auth_data.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -13,8 +14,12 @@ class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final _email = TextEditingController();
   final _password = TextEditingController();
+
   bool _loading = false;
   String? _error;
+
+ 
+  final AuthService _auth = AuthServiceSupabase();
 
   @override
   void dispose() {
@@ -26,20 +31,25 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> _signIn() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() { _loading = true; _error = null; });
+
     try {
-      await Supabase.instance.client.auth.signInWithPassword(
+      await _auth.signIn(
         email: _email.text.trim(),
         password: _password.text,
       );
-      if (mounted) Navigator.of(context).pushReplacementNamed('/home');
-    } on AuthException catch (e, st) {
-      setState(() => _error = e.message.isNotEmpty
-          ? e.message
-          : 'Error de autenticación (${e.statusCode ?? 'desconocido'})');
-      debugPrint('AuthException ⇒ status:${e.statusCode} msg:${e.message}\n$st');
+
+ 
+      await _auth.refreshSession();
+
+      if (_auth.currentUserId() != null && mounted) {
+        Navigator.pushReplacementNamed(context, '/perfil');
+      } else {
+        setState(() => _error = 'No se pudo iniciar sesión. Intenta nuevamente.');
+      }
     } catch (e, st) {
-      setState(() => _error = 'Error inesperado: $e');
-      debugPrint('Unexpected error in _signIn ⇒ $e\n$st');
+      setState(() => _error = e.toString().replaceFirst('Exception: ', ''));
+ 
+      print('Login error ⇒ $e\n$st');
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -53,20 +63,16 @@ class _LoginScreenState extends State<LoginScreen> {
     }
     setState(() { _loading = true; _error = null; });
     try {
-      await Supabase.instance.client.auth.resetPasswordForEmail(email);
+      await _auth.resetPassword(email);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Si el correo existe, te enviamos instrucciones.')),
         );
       }
-    } on AuthException catch (e, st) {
-      setState(() => _error = e.message.isNotEmpty
-          ? e.message
-          : 'Error de autenticación (${e.statusCode ?? 'desconocido'})');
-      debugPrint('AuthException in resetPassword ⇒ status:${e.statusCode} msg:${e.message}\n$st');
     } catch (e, st) {
-      setState(() => _error = 'Error inesperado: $e');
-      debugPrint('Unexpected error in resetPassword ⇒ $e\n$st');
+      setState(() => _error = e.toString().replaceFirst('Exception: ', ''));
+      
+      print('resetPassword error ⇒ $e\n$st');
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -92,20 +98,23 @@ class _LoginScreenState extends State<LoginScreen> {
                 children: [
                   // Header
                   Text('TeamUp',
-                      style: t.headlineMedium?.copyWith(
-                        fontWeight: FontWeight.w700,
-                        color: cs.onSurface,
-                      )),
+                    style: t.headlineMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      color: cs.onSurface,
+                    ),
+                  ),
                   const SizedBox(height: 16),
                   Text('Bienvenido de nuevo',
-                      style: t.titleLarge?.copyWith(
-                        fontWeight: FontWeight.w700,
-                        color: cs.onSurface,
-                      )),
+                    style: t.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      color: cs.onSurface,
+                    ),
+                  ),
                   const SizedBox(height: 8),
                   Text('Inicia sesión para continuar tu viaje',
-                      style: t.bodyMedium?.copyWith(color: onSurfaceVariant),
-                      textAlign: TextAlign.center),
+                    style: t.bodyMedium?.copyWith(color: onSurfaceVariant),
+                    textAlign: TextAlign.center,
+                  ),
                   const SizedBox(height: 24),
 
                   // Formulario
@@ -113,7 +122,6 @@ class _LoginScreenState extends State<LoginScreen> {
                     key: _formKey,
                     child: Column(
                       children: [
-                        // Email
                         TextFormField(
                           controller: _email,
                           keyboardType: TextInputType.emailAddress,
@@ -130,8 +138,6 @@ class _LoginScreenState extends State<LoginScreen> {
                           },
                         ),
                         const SizedBox(height: 12),
-
-                        // Contraseña
                         TextFormField(
                           controller: _password,
                           obscureText: true,
@@ -141,18 +147,13 @@ class _LoginScreenState extends State<LoginScreen> {
                             border: OutlineInputBorder(),
                           ),
                           validator: (v) {
-                            if (v == null || v.isEmpty) {
-                              return 'Ingresa tu contraseña';
-                            }
-                            if (v.length < 6) {
-                              return 'Debe tener al menos 6 caracteres';
-                            }
+                            if (v == null || v.isEmpty) return 'Ingresa tu contraseña';
+                            if (v.length < 6) return 'Debe tener al menos 6 caracteres';
                             return null;
                           },
                         ),
                         const SizedBox(height: 8),
 
-                        // Recuperar contraseña
                         Row(
                           mainAxisAlignment: MainAxisAlignment.end,
                           children: [
@@ -163,7 +164,6 @@ class _LoginScreenState extends State<LoginScreen> {
                           ],
                         ),
 
-                        // Mensaje de error
                         if (_error != null) ...[
                           const SizedBox(height: 8),
                           Text(_error!, style: TextStyle(color: cs.error)),
@@ -171,7 +171,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
                         const SizedBox(height: 8),
 
-                        // Botón de inicio de sesión
                         SizedBox(
                           width: double.infinity,
                           height: 56,
@@ -188,14 +187,12 @@ class _LoginScreenState extends State<LoginScreen> {
 
                   const SizedBox(height: 24),
 
-                  // Divider "O continuar con"
                   Row(
                     children: [
                       Expanded(child: Divider(color: Theme.of(context).dividerColor)),
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 12),
-                        child: Text(
-                          'O continuar con',
+                        child: Text('O continuar con',
                           style: t.bodySmall?.copyWith(color: onSurfaceVariant),
                         ),
                       ),
@@ -204,7 +201,6 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   const SizedBox(height: 12),
 
-                  // Botones sociales (placeholder)
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
@@ -238,7 +234,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
                   const SizedBox(height: 24),
 
-                  // Footer registro
                   Text.rich(
                     TextSpan(
                       text: "¿No tienes una cuenta? ",
@@ -247,12 +242,9 @@ class _LoginScreenState extends State<LoginScreen> {
                         WidgetSpan(
                           alignment: PlaceholderAlignment.middle,
                           child: TextButton(
-                            onPressed: () => Navigator.of(context).push(
-                              MaterialPageRoute(builder: (_) => const CreateAccountScreen()),
-                            ),
+                            onPressed: () => Navigator.of(context).pushNamed('/create-account'),
                             child: const Text('Regístrate'),
                           ),
-
                         ),
                       ],
                     ),
