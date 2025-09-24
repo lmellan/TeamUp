@@ -124,11 +124,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
         centerTitle: true,
         actions: [
           IconButton(
-            tooltip: 'Editar perfil',
-            onPressed: () => Navigator.pushNamed(context, '/edit-profile')
-                .then((_) => _loadAll()),
-            icon: const Icon(Icons.edit_outlined),
-          ),
+                    tooltip: 'Editar perfil',
+                    onPressed: () async {
+                      final result = await Navigator.pushNamed(
+                        context,
+                        '/edit-profile',
+                        arguments: _profile,
+                      );
+                      if (result == true) {
+                        // If the edit screen indicates a change, reload everything.
+                        await _loadAll();
+                        ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Perfil actualizado')), 
+                        );
+                      }
+                    },
+                    icon: const Icon(Icons.edit_outlined),
+                  ),
         ],
       ),
       body: SafeArea(
@@ -166,7 +178,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               const SizedBox(height: 20),
 
               // Deportes
-              Text('Deportes favoritos',
+              Text('Deporte favorito',
                   style: t.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
               if (_loading && _sports.isEmpty)
