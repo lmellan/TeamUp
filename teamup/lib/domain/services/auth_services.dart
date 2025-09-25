@@ -15,6 +15,5 @@ abstract class AuthService {
 
   Future<void> refreshSession();
 
- 
   String? currentUserId();
 }
