@@ -1,18 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../domain/entities/deportes.dart';   // Sport (con fields: List<FieldSpec>)
-import '../domain/entities/field_spec.dart'; // FieldSpec
-import '../domain/entities/actividad.dart';  // Activity (modelo con fields jsonb)
-import '../data/actividad_data.dart';        // ActivityServiceSupabase
+import '../domain/entities/deportes.dart';
+import '../domain/entities/field_spec.dart';
+import '../domain/entities/actividad.dart';
+
+import '../domain/services/deportes_services.dart';
+import '../data/deportes_data.dart';
+import '../data/actividad_data.dart';
 
 class CreateActivityScreen extends StatefulWidget {
-  const CreateActivityScreen({
+  CreateActivityScreen({
     super.key,
-    required this.sport, // deporte ya elegido antes
-  });
+    SportService? deportes,
+  }) : deportes = deportes ?? SportServiceSupabase();
 
-  final Sport sport;
+  final SportService deportes;
 
   @override
   State<CreateActivityScreen> createState() => _CreateActivityScreenState();
@@ -26,20 +29,29 @@ class _CreateActivityScreenState extends State<CreateActivityScreen> {
   final _form2 = GlobalKey<FormState>();
   final _form3 = GlobalKey<FormState>();
 
-  // paso 1
+  // Paso 1
   final titleCtrl = TextEditingController();
   final descCtrl = TextEditingController();
   final maxPlayersCtrl = TextEditingController();
-  String? level; // Principiante | Intermedio | Avanzado
+  String? level;             // Principiante | Intermedio | Avanzado
+  Sport? _sport;
 
-  // paso 2
+  // deportes (fetch interno)
+  List<Sport> _sports = [];
+  bool _loadingSports = true;
+
+  // Paso 2
   DateTime? _date;
   TimeOfDay? _time;
-  final locationCtrl = TextEditingController(); // place_name (texto simple)
-  // si luego agregas Google Places, puedes setear formattedAddress/lat/lng
+  final placeNameCtrl = TextEditingController();        // place_name (requerido)
+  final formattedAddrCtrl = TextEditingController();    // formatted_address (requerido)
+  final activityLocCtrl = TextEditingController();      // activity_location (opcional texto)
+  final latCtrl = TextEditingController();              // opcional
+  final lngCtrl = TextEditingController();              // opcional
+  final googlePlaceIdCtrl = TextEditingController();    // opcional
 
-  // paso 3 (dinámico)
-  late final List<FieldSpec> dynamicFields;
+  // Paso 3 (dinámico)
+  List<FieldSpec> dynamicFields = const [];
   final Map<String, dynamic> dynamicAnswers = {};
 
   bool _saving = false;
@@ -47,7 +59,23 @@ class _CreateActivityScreenState extends State<CreateActivityScreen> {
   @override
   void initState() {
     super.initState();
-    dynamicFields = widget.sport.fields;
+    _fetchSports();
+  }
+
+  Future<void> _fetchSports() async {
+    try {
+      final list = await widget.deportes.listAll();
+      if (!mounted) return;
+      setState(() {
+        _sports = list;
+        _loadingSports = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _loadingSports = false);
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('No se pudieron cargar los deportes')));
+    }
   }
 
   @override
@@ -56,21 +84,28 @@ class _CreateActivityScreenState extends State<CreateActivityScreen> {
     titleCtrl.dispose();
     descCtrl.dispose();
     maxPlayersCtrl.dispose();
-    locationCtrl.dispose();
+    placeNameCtrl.dispose();
+    formattedAddrCtrl.dispose();
+    activityLocCtrl.dispose();
+    latCtrl.dispose();
+    lngCtrl.dispose();
+    googlePlaceIdCtrl.dispose();
     super.dispose();
   }
 
   void _next(int step) {
-    final isOk = switch (step) {
-      1 => _form1.currentState?.validate() ?? false,
+    final ok = switch (step) {
+      1 => (_form1.currentState?.validate() ?? false) && _sport != null,
       2 => _form2.currentState?.validate() ?? false,
       _ => true,
     };
-    if (isOk) {
-      _page.nextPage(
-        duration: const Duration(milliseconds: 220),
-        curve: Curves.easeOut,
-      );
+    if (!ok && step == 1 && _sport == null) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Selecciona un deporte')));
+      return;
+    }
+    if (ok) {
+      _page.nextPage(duration: const Duration(milliseconds: 220), curve: Curves.easeOut);
     }
   }
 
@@ -91,55 +126,58 @@ class _CreateActivityScreenState extends State<CreateActivityScreen> {
   }
 
   Future<void> _pickTime() async {
-    final picked =
-        await showTimePicker(context: context, initialTime: _time ?? TimeOfDay.now());
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: _time ?? TimeOfDay.now(),
+    );
     if (picked != null) setState(() => _time = picked);
   }
 
   Future<void> _publish() async {
     if (!(_form3.currentState?.validate() ?? false)) return;
+    if (_sport == null) {
+      _page.jumpToPage(0);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Selecciona un deporte')),
+      );
+      return;
+    }
     if (_date == null || _time == null) {
+      _page.jumpToPage(1);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Selecciona fecha y hora')),
       );
-      _page.jumpToPage(1);
       return;
     }
 
     final userId = Supabase.instance.client.auth.currentUser?.id;
     if (userId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Debes iniciar sesión')),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Debes iniciar sesión')));
       return;
     }
 
-    // construir DateTime UTC
-    final localDT = DateTime(
-      _date!.year,
-      _date!.month,
-      _date!.day,
-      _time!.hour,
-      _time!.minute,
-    );
-    final dateUtc = localDT.toUtc();
-
-    final maxPlayers = num.tryParse(maxPlayersCtrl.text.trim())?.toInt();
+    // Construir DateTime en UTC
+    final localDT = DateTime(_date!.year, _date!.month, _date!.day, _time!.hour, _time!.minute);
+    final whenUtc = localDT.toUtc();
 
     final activity = Activity(
-      id: '', // lo genera supabase
+      sportId: _sport!.id,
       creatorId: userId,
-      sportId: widget.sport.id,
       title: titleCtrl.text.trim(),
       description: descCtrl.text.trim().isEmpty ? null : descCtrl.text.trim(),
-      status: 'published',
-      dateUtc: dateUtc,
-      placeName: locationCtrl.text.trim().isEmpty ? null : locationCtrl.text.trim(),
-      formattedAddress: null,
-      lat: null,
-      lng: null,
+      status: 'activa',
+      date: whenUtc,
+      // ubicación
+      placeName: placeNameCtrl.text.trim(),
+      formattedAddress: formattedAddrCtrl.text.trim(),
+      activityLocation: activityLocCtrl.text.trim().isEmpty ? null : activityLocCtrl.text.trim(),
+      googlePlaceId: googlePlaceIdCtrl.text.trim().isEmpty ? null : googlePlaceIdCtrl.text.trim(),
+      lat: num.tryParse(latCtrl.text.trim())?.toDouble(),
+      lng: num.tryParse(lngCtrl.text.trim())?.toDouble(),
+      // otros
+      maxPlayers: num.tryParse(maxPlayersCtrl.text.trim())?.toInt(),
       level: level,
-      maxPlayers: maxPlayers,
       fields: Map<String, dynamic>.from(dynamicAnswers),
     );
 
@@ -147,15 +185,13 @@ class _CreateActivityScreenState extends State<CreateActivityScreen> {
     try {
       final created = await ActivityServiceSupabase().create(activity);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Actividad publicada (${created.id})')),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Actividad publicada (${created.id})')));
       Navigator.of(context).pop();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error al publicar: $e')),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Error al publicar: $e')));
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -188,8 +224,32 @@ class _CreateActivityScreenState extends State<CreateActivityScreen> {
                       children: [
                         LinearProgressIndicator(value: 1 / 3),
                         const SizedBox(height: 16),
-                        Text(widget.sport.name, style: Theme.of(context).textTheme.titleMedium),
-                        const SizedBox(height: 8),
+
+                        DropdownButtonFormField<Sport>(
+                          value: _sport,
+                          decoration: const InputDecoration(labelText: 'Deporte'),
+                          items: _loadingSports
+                              ? const []
+                              : _sports
+                                  .map((s) => DropdownMenuItem(value: s, child: Text(s.name)))
+                                  .toList(),
+                          onChanged: _loadingSports
+                              ? null
+                              : (s) {
+                                  setState(() {
+                                    _sport = s;
+                                    dynamicFields = s?.fields ?? const [];
+                                    dynamicAnswers.clear();
+                                  });
+                                },
+                          validator: (_) => _sport == null ? 'Selecciona un deporte' : null,
+                        ),
+                        if (_loadingSports) ...[
+                          const SizedBox(height: 8),
+                          const LinearProgressIndicator(minHeight: 2),
+                        ],
+
+                        const SizedBox(height: 12),
                         TextFormField(
                           controller: titleCtrl,
                           decoration: const InputDecoration(
@@ -199,6 +259,7 @@ class _CreateActivityScreenState extends State<CreateActivityScreen> {
                           validator: (v) =>
                               (v == null || v.trim().isEmpty) ? 'Ingresa un título' : null,
                         ),
+
                         const SizedBox(height: 12),
                         TextFormField(
                           controller: descCtrl,
@@ -208,6 +269,7 @@ class _CreateActivityScreenState extends State<CreateActivityScreen> {
                             hintText: 'Cuéntales detalles de la actividad',
                           ),
                         ),
+
                         const SizedBox(height: 12),
                         TextFormField(
                           controller: maxPlayersCtrl,
@@ -223,6 +285,7 @@ class _CreateActivityScreenState extends State<CreateActivityScreen> {
                             return null;
                           },
                         ),
+
                         const SizedBox(height: 12),
                         DropdownButtonFormField<String>(
                           value: level,
@@ -233,11 +296,9 @@ class _CreateActivityScreenState extends State<CreateActivityScreen> {
                           onChanged: (v) => setState(() => level = v),
                           validator: (v) => v == null ? 'Selecciona un nivel' : null,
                         ),
+
                         const Spacer(),
-                        FilledButton(
-                          onPressed: () => _next(1),
-                          child: const Text('Siguiente'),
-                        ),
+                        FilledButton(onPressed: () => _next(1), child: const Text('Siguiente')),
                       ],
                     ),
                   ),
@@ -253,6 +314,7 @@ class _CreateActivityScreenState extends State<CreateActivityScreen> {
                       children: [
                         LinearProgressIndicator(value: 2 / 3),
                         const SizedBox(height: 16),
+
                         ListTile(
                           contentPadding: EdgeInsets.zero,
                           title: const Text('Fecha'),
@@ -268,27 +330,79 @@ class _CreateActivityScreenState extends State<CreateActivityScreen> {
                         ListTile(
                           contentPadding: EdgeInsets.zero,
                           title: const Text('Hora'),
-                          subtitle: Text(
-                            _time != null ? _time!.format(context) : 'Selecciona hora',
-                          ),
+                          subtitle:
+                              Text(_time != null ? _time!.format(context) : 'Selecciona hora'),
                           trailing: const Icon(Icons.access_time),
                           onTap: _pickTime,
                         ),
+
                         const SizedBox(height: 12),
                         TextFormField(
-                          controller: locationCtrl,
+                          controller: placeNameCtrl,
                           decoration: const InputDecoration(
-                            labelText: 'Ubicación',
+                            labelText: 'Lugar (place_name)',
                             hintText: 'Ej. Estadio Municipal, Cancha 2',
                           ),
                           validator: (v) =>
-                              (v == null || v.trim().isEmpty) ? 'Ingresa una ubicación' : null,
+                              (v == null || v.trim().isEmpty) ? 'Ingresa el lugar' : null,
                         ),
+
+                        const SizedBox(height: 12),
+                        TextFormField(
+                          controller: formattedAddrCtrl,
+                          decoration: const InputDecoration(
+                            labelText: 'Dirección (formatted_address)',
+                            hintText: 'Ej. Viña del Mar, Chile',
+                          ),
+                          validator: (v) => (v == null || v.trim().isEmpty)
+                              ? 'Ingresa la dirección'
+                              : null,
+                        ),
+
+                        const SizedBox(height: 12),
+                        TextFormField(
+                          controller: activityLocCtrl,
+                          decoration: const InputDecoration(
+                            labelText: 'Referencia (activity_location)',
+                            hintText: 'Indoor / Outdoor / Cancha techada… (opcional)',
+                          ),
+                        ),
+
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextFormField(
+                                controller: latCtrl,
+                                keyboardType: TextInputType.number,
+                                decoration: const InputDecoration(
+                                  labelText: 'Lat (opcional)',
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: TextFormField(
+                                controller: lngCtrl,
+                                keyboardType: TextInputType.number,
+                                decoration: const InputDecoration(
+                                  labelText: 'Lng (opcional)',
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+
+                        const SizedBox(height: 12),
+                        TextFormField(
+                          controller: googlePlaceIdCtrl,
+                          decoration: const InputDecoration(
+                            labelText: 'Google Place ID (opcional)',
+                          ),
+                        ),
+
                         const Spacer(),
-                        FilledButton(
-                          onPressed: () => _next(2),
-                          child: const Text('Siguiente'),
-                        ),
+                        FilledButton(onPressed: () => _next(2), child: const Text('Siguiente')),
                       ],
                     ),
                   ),
@@ -307,7 +421,7 @@ class _CreateActivityScreenState extends State<CreateActivityScreen> {
                         Text('Preguntas específicas',
                             style: Theme.of(context).textTheme.titleMedium),
                         const SizedBox(height: 8),
-                        if (dynamicFields.isEmpty)
+                        if ((_sport?.fields ?? const []).isEmpty)
                           const Text('Este deporte no requiere campos adicionales.'),
                         ...dynamicFields.map((f) => _buildDynamicField(f)),
                         const Spacer(),
@@ -352,9 +466,7 @@ class _CreateActivityScreenState extends State<CreateActivityScreen> {
           child: DropdownButtonFormField<String>(
             value: (value as String?),
             decoration: InputDecoration(labelText: f.label),
-            items: (f.options ?? const [])
-                .map((o) => DropdownMenuItem(value: o, child: Text(o)))
-                .toList(),
+            items: f.options.map((o) => DropdownMenuItem(value: o, child: Text(o))).toList(),
             onChanged: (v) => setState(() => dynamicAnswers[f.key] = v),
             validator: (v) =>
                 (f.required && (v == null || v.isEmpty)) ? 'Requerido' : null,
