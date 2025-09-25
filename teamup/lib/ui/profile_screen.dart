@@ -87,7 +87,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         final up = <Activity>[];
         final hi = <Activity>[];
         for (final a in acts) {
-          final isUpcoming = activeStatuses.contains(a.status) && a.dateUtc.isAfter(now);
+          final isUpcoming = activeStatuses.contains(a.status) && a.date.isAfter(now);
           (isUpcoming ? up : hi).add(a);
         }
         _upcoming = up;
@@ -230,7 +230,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     final rawTitle = _trimOrEmpty(a.title);
                     final desc = _trimOrEmpty(a.description);
                     final title = rawTitle.isNotEmpty ? rawTitle : (desc.isEmpty ? 'Sin título' : desc);
-                    final dt = a.dateUtc.toLocal();
+                    final dt = a.date.toLocal();
                     final place = _trimOrEmpty(a.placeName ?? a.formattedAddress);
 
                     return _ActivityCard(
@@ -263,7 +263,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     final rawTitle = _trimOrEmpty(a.title);
                     final desc = _trimOrEmpty(a.description);
                     final title = rawTitle.isNotEmpty ? rawTitle : (desc.isEmpty ? 'Sin título' : desc);
-                    final dt = a.dateUtc.toLocal();
+                    final dt = a.date.toLocal();
                     final place = _trimOrEmpty(a.placeName ?? a.formattedAddress);
 
                     return _ActivityCard(

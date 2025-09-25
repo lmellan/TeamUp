@@ -450,7 +450,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
                       : (desc.isEmpty ? 'Sin título' : desc);
 
                   final place = _trimOrEmpty(a.placeName ?? a.formattedAddress);
-                  final dt = a.dateUtc.toLocal();
+                  final dt = a.date.toLocal();
 
                   return Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
