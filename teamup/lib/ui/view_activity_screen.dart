@@ -88,7 +88,7 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
       final sports = await widget.sportSvc.listByIds([a.sportId]);
       _sport = sports.isNotEmpty ? sports.first : null;
 
-      final parts = await widget.participantSvc.listByActivity(a.id);
+      final parts = await widget.participantSvc.listByActivity(a.id!);
       _participants = parts;
 
       final userIds = parts.map((p) => p.userId).toSet().toList();
@@ -115,7 +115,7 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
     if (_a == null) return 'Cargando...';
     final now = DateTime.now().toUtc();
     if (!['activa', 'en_curso'].contains(_a!.status)) return 'No está activa';
-    if (now.isAfter(_a!.dateUtc)) return 'Ya ocurrió';
+    if (now.isAfter(_a!.date)) return 'Ya ocurrió';
     final max = _a!.maxPlayers ?? 0;
     if (max > 0 && _joinedCount >= max) return 'Cupos completos';
     return null;
@@ -127,7 +127,7 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
     setState(() => _busy = true);
     try {
       if (_iAmJoined) {
-        await widget.participantSvc.leave(_a!.id, _me!.id);
+        await widget.participantSvc.leave(_a!.id!, _me!.id);
       } else {
         final reason = _joinDisableReason();
         if (reason != null) {
@@ -140,7 +140,7 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
         }
  
         await widget.participantSvc.join(
-          _a!.id,
+          _a!.id!,
           _me!.id,
           role: ParticipantRole.miembro,
         );
@@ -175,7 +175,7 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
     final sportLabel =
         s == null ? 'Actividad' : '${_s(s.iconEmoji).isEmpty ? '🎯' : _s(s.iconEmoji)} ${s.name}';
     final place = _s(a.placeName ?? a.formattedAddress);
-    final dateText = _formatDate(a.dateUtc.toLocal());
+    final dateText = _formatDate(a.date.toLocal());
     final max = a.maxPlayers ?? 0;
     final disableReason = _joinDisableReason();
 
