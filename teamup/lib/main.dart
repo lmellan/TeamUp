@@ -15,6 +15,7 @@ import '/ui/create_account_screen.dart';
 import '/ui/profile_screen.dart';
 import '/ui/explore_screen.dart';
 import '/ui/view_activity_screen.dart'; // ActivityDetailScreen
+import 'ui/create_activity_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -69,6 +70,7 @@ class MyApp extends StatelessWidget {
         '/perfil': (_) => const ProfileScreen(),
         '/explore': (_) => ExploreScreen(),
         '/create-account': (_) => const CreateAccountScreen(),
+        '/create': (_) => CreateActivityScreen(), 
         '/detail-activity': (context) {
           final id = ModalRoute.of(context)!.settings.arguments as String;
           return ActivityDetailScreen(activityId: id);
