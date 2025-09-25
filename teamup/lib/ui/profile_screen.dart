@@ -155,13 +155,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   children: [
                     CircleAvatar(
                       radius: 48,
-                      backgroundImage: avatarUrl.isNotEmpty ? NetworkImage(avatarUrl) : null,
-                      child: avatarUrl.isEmpty
+                      backgroundColor: cs.primaryContainer,
+                      child: _profile != null && _profile!.avatarUrl != null && _profile!.avatarUrl!.isNotEmpty
                           ? Text(
+                              _profile!.avatarUrl!,
+                              style: const TextStyle(fontSize: 48), // Grande y centrado
+                            )
+                          : Text(
                               (name.isNotEmpty ? name.substring(0, 1) : 'T').toUpperCase(),
                               style: t.headlineMedium?.copyWith(color: cs.onPrimary),
-                            )
-                          : null,
+                            ),
                     ),
                     const SizedBox(height: 12),
                     Text(name.isNotEmpty ? name : 'Tu nombre',
@@ -178,30 +181,32 @@ class _ProfileScreenState extends State<ProfileScreen> {
               const SizedBox(height: 20),
 
               // Deportes
-              Text('Deporte favorito',
-                  style: t.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
-              const SizedBox(height: 8),
-              if (_loading && _sports.isEmpty)
-                const LinearProgressIndicator()
-              else if (_sports.isEmpty)
-                Text('Aún no seleccionaste deportes.',
-                    style: t.bodySmall?.copyWith(color: muted))
-              else
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: _sports.map((s) {
-                    final label = [
-                      _trimOrEmpty(s.iconEmoji),
-                      s.name,
-                    ].where((x) => x.isNotEmpty).join('  ');
-                    return Chip(
-                      label: Text(label),
-                      backgroundColor: cs.primaryContainer.withOpacity(0.6),
-                      labelStyle: t.bodyMedium?.copyWith(color: cs.onPrimaryContainer),
-                    );
-                  }).toList(),
+              Text(
+                  _sports.length <= 1 ? 'Deporte favorito' : 'Deportes favoritos',
+                  style: t.titleMedium?.copyWith(fontWeight: FontWeight.bold),
                 ),
+                const SizedBox(height: 8),
+                if (_loading && _sports.isEmpty)
+                  const LinearProgressIndicator()
+                else if (_sports.isEmpty)
+                  Text('Aún no seleccionaste deportes.',
+                      style: t.bodySmall?.copyWith(color: muted))
+                else
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: _sports.map((s) {
+                      final label = [
+                        _trimOrEmpty(s.iconEmoji),
+                        s.name,
+                      ].where((x) => x.isNotEmpty).join('  ');
+                      return Chip(
+                        label: Text(label),
+                        backgroundColor: cs.primaryContainer.withOpacity(0.6),
+                        labelStyle: t.bodyMedium?.copyWith(color: cs.onPrimaryContainer),
+                      );
+                    }).toList(),
+                  ),
 
               const SizedBox(height: 16),
 
