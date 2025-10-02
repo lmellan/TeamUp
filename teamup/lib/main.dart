@@ -5,6 +5,7 @@ import 'package:intl/date_symbol_data_local.dart';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:teamup/domain/entities/perfil.dart';
 
 import 'componentes/app_theme.dart';
 
@@ -14,8 +15,8 @@ import '/ui/complete_perfil_screen.dart';
 import '/ui/create_account_screen.dart';
 import '/ui/profile_screen.dart';
 import '/ui/explore_screen.dart';
-import '/ui/view_activity_screen.dart'; // ActivityDetailScreen
-import 'ui/create_activity_screen.dart';
+import '/ui/view_activity_screen.dart';
+import '/ui/edit_profile_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -75,7 +76,11 @@ class MyApp extends StatelessWidget {
           final id = ModalRoute.of(context)!.settings.arguments as String;
           return ActivityDetailScreen(activityId: id);
         },
-        // '/edit-profile': (_) => const EditProfileScreen(),
+         '/edit-profile': (context) {
+                  final profile = ModalRoute.of(context)!.settings.arguments as Profile?;
+                  return EditProfileScreen(profile: profile);
+                },
+
       },
     );
   }
