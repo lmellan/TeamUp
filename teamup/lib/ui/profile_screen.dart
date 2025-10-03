@@ -202,7 +202,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ].where((x) => x.isNotEmpty).join('  ');
                       return Chip(
                         label: Text(label),
-                        backgroundColor: cs.primaryContainer.withOpacity(0.6),
+                        backgroundColor: cs.primaryContainer.withValues(alpha: 0.6),
                         labelStyle: t.bodyMedium?.copyWith(color: cs.onPrimaryContainer),
                       );
                     }).toList(),
@@ -218,7 +218,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 Card(
                   child: ListTile(
                     leading: CircleAvatar(
-                      backgroundColor: cs.primary.withOpacity(0.2),
+                      backgroundColor: cs.primary.withValues(alpha: 0.6),
                       child: Icon(Icons.location_on, color: cs.primary),
                     ),
                     title: const Text('Ubicación'),
@@ -330,7 +330,7 @@ class _ActivityCard extends StatelessWidget {
             width: 96,
             height: 96,
             decoration: BoxDecoration(
-              color: cs.primaryContainer.withOpacity(0.35),
+              color: cs.primaryContainer.withValues(alpha: 0.35),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Icon(Icons.image, color: cs.onPrimaryContainer),

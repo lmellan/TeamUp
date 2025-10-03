@@ -32,6 +32,11 @@ class AppTheme {
       ),
       scaffoldBackgroundColor: Colors.white,
       visualDensity: VisualDensity.standard,
+      inputDecorationTheme: InputDecorationTheme(
+      hintStyle: TextStyle(
+        color: Colors.grey.shade400, // hintText clarito global
+      ),
+    ),
     );
 
     return base.copyWith(
@@ -62,6 +67,10 @@ class AppTheme {
       dividerTheme: const DividerThemeData(
         color: AppColors.divider,
         thickness: 1,
+      ),
+      snackBarTheme: SnackBarThemeData(
+        backgroundColor: AppColors.primary, // verde
+        contentTextStyle: const TextStyle(color: Colors.white),
       ),
       navigationBarTheme: NavigationBarThemeData(
         backgroundColor: base.colorScheme.surface,

@@ -1,13 +1,20 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+
+import 'package:google_maps_flutter/google_maps_flutter.dart' as gmaps;
+import 'package:flutter_google_places_sdk/flutter_google_places_sdk.dart' as places;
 
 import '../domain/entities/deportes.dart';
 import '../domain/entities/field_spec.dart';
 import '../domain/entities/actividad.dart';
+import '../domain/entities/picked_place.dart';
 
 import '../domain/services/deportes_services.dart';
+
 import '../data/deportes_data.dart';
 import '../data/actividad_data.dart';
+
 
 class CreateActivityScreen extends StatefulWidget {
   CreateActivityScreen({
@@ -23,6 +30,15 @@ class CreateActivityScreen extends StatefulWidget {
 
 class _CreateActivityScreenState extends State<CreateActivityScreen> {
   final _page = PageController();
+  int _currentPage = 0;
+
+  void _goBack() {
+    if (_currentPage == 0) {
+      Navigator.of(context).pushNamedAndRemoveUntil('/explore', (route) => false);
+    } else {
+      _prev();
+    }
+  }
 
   // forms
   final _form1 = GlobalKey<FormState>();
@@ -43,9 +59,11 @@ class _CreateActivityScreenState extends State<CreateActivityScreen> {
   // Paso 2
   DateTime? _date;
   TimeOfDay? _time;
+
+  // estos se rellenan con el picker
   final placeNameCtrl = TextEditingController();        // place_name (requerido)
   final formattedAddrCtrl = TextEditingController();    // formatted_address (requerido)
-  final activityLocCtrl = TextEditingController();      // activity_location (opcional texto)
+  final activityLocCtrl = TextEditingController();      // activity_location (opcional)
   final latCtrl = TextEditingController();              // opcional
   final lngCtrl = TextEditingController();              // opcional
   final googlePlaceIdCtrl = TextEditingController();    // opcional
@@ -126,11 +144,27 @@ class _CreateActivityScreenState extends State<CreateActivityScreen> {
   }
 
   Future<void> _pickTime() async {
-    final picked = await showTimePicker(
-      context: context,
-      initialTime: _time ?? TimeOfDay.now(),
-    );
-    if (picked != null) setState(() => _time = picked);
+  final picked = await showTimePicker(
+    context: context,
+    initialTime: _time ?? TimeOfDay.now(),
+    initialEntryMode: TimePickerEntryMode.input,
+  );
+  if (picked != null) {
+    setState(() => _time = picked);
+  }
+}
+
+  Future<void> _openPlacePicker() async {
+    final picked = await showPlacePicker(context);
+    if (picked != null) {
+      setState(() {
+        formattedAddrCtrl.text  = picked.formattedAddress;
+        placeNameCtrl.text      = picked.placeName.isEmpty ? picked.formattedAddress : picked.placeName;
+        latCtrl.text            = picked.lat.toString();
+        lngCtrl.text            = picked.lng.toString();
+        googlePlaceIdCtrl.text  = picked.placeId ?? '';
+      });
+    }
   }
 
   Future<void> _publish() async {
@@ -186,8 +220,8 @@ class _CreateActivityScreenState extends State<CreateActivityScreen> {
       final created = await ActivityServiceSupabase().create(activity);
       if (!mounted) return;
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Actividad publicada (${created.id})')));
-      Navigator.of(context).pop();
+          .showSnackBar(SnackBar(content: Text('Actividad publicada: ${created.title}')));
+      Navigator.of(context).pushReplacementNamed('/detail-activity', arguments: created.id.toString());
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context)
@@ -199,12 +233,11 @@ class _CreateActivityScreenState extends State<CreateActivityScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final levels = const ['Principiante', 'Intermedio', 'Avanzado'];
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Crear actividad'),
-        leading: IconButton(icon: const Icon(Icons.chevron_left), onPressed: _prev),
+        leading: IconButton(icon: const Icon(Icons.chevron_left), onPressed: _goBack),
       ),
       body: AbsorbPointer(
         absorbing: _saving,
@@ -213,227 +246,269 @@ class _CreateActivityScreenState extends State<CreateActivityScreen> {
             PageView(
               controller: _page,
               physics: const NeverScrollableScrollPhysics(),
+              onPageChanged: (i) => setState(() => _currentPage = i),
               children: [
                 // PASO 1
                 Padding(
                   padding: const EdgeInsets.all(16),
-                  child: Form(
-                    key: _form1,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        LinearProgressIndicator(value: 1 / 3),
-                        const SizedBox(height: 16),
-
-                        DropdownButtonFormField<Sport>(
-                          value: _sport,
-                          decoration: const InputDecoration(labelText: 'Deporte'),
-                          items: _loadingSports
-                              ? const []
-                              : _sports
-                                  .map((s) => DropdownMenuItem(value: s, child: Text(s.name)))
-                                  .toList(),
-                          onChanged: _loadingSports
-                              ? null
-                              : (s) {
-                                  setState(() {
-                                    _sport = s;
-                                    dynamicFields = s?.fields ?? const [];
-                                    dynamicAnswers.clear();
-                                  });
-                                },
-                          validator: (_) => _sport == null ? 'Selecciona un deporte' : null,
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      return SingleChildScrollView(
+                        padding: EdgeInsets.only(
+                          bottom: MediaQuery.of(context).viewInsets.bottom + 16,
                         ),
-                        if (_loadingSports) ...[
-                          const SizedBox(height: 8),
-                          const LinearProgressIndicator(minHeight: 2),
-                        ],
+                        child: ConstrainedBox(
+                          constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                          child: Form(
+                            key: _form1,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                LinearProgressIndicator(value: 1 / 3),
+                                const SizedBox(height: 20),
+                                Text('🎯 ¿Qué actividad crearás?', style: Theme.of(context).textTheme.titleLarge),
+                                const SizedBox(height: 20),
+                                Text("Deporte", style: const TextStyle(fontWeight: FontWeight.w500)),
+                                DropdownButtonFormField<Sport>(
+                                  initialValue: _sport,
+                                  decoration: const InputDecoration(
+                                    border: OutlineInputBorder(),
+                                    prefixIcon: Icon(Icons.sports_soccer),
+                                    hintText: 'Selecciona un deporte',
+                                  ),
+                                  items: _loadingSports
+                                      ? const []
+                                      : _sports
+                                          .map((s) => DropdownMenuItem(
+                                                value: s,
+                                                child: Text("${s.iconEmoji} ${s.name}"),
+                                              ))
+                                          .toList(),
+                                  onChanged: _loadingSports
+                                      ? null
+                                      : (s) {
+                                          setState(() {
+                                            _sport = s;
+                                            dynamicFields = s?.fields ?? const [];
+                                            dynamicAnswers.clear();
+                                          });
+                                        },
+                                  validator: (_) =>
+                                      _sport == null ? 'Selecciona un deporte' : null,
+                                ),
+                                if (_loadingSports) ...[
+                                  const SizedBox(height: 8),
+                                  const LinearProgressIndicator(minHeight: 2),
+                                ],
 
-                        const SizedBox(height: 12),
-                        TextFormField(
-                          controller: titleCtrl,
-                          decoration: const InputDecoration(
-                            labelText: 'Título',
-                            hintText: 'Ej. Partido amistoso',
+                                const SizedBox(height: 16),
+                                Text("Título", style: const TextStyle(fontWeight: FontWeight.w500)),
+                                TextFormField(
+                                  controller: titleCtrl,
+                                  decoration: const InputDecoration(
+                                    hintText: 'Ej. Partido amistoso',
+                                    prefixIcon: Icon(Icons.title),
+                                    border: OutlineInputBorder(),
+                                  ),
+                                  validator: (v) =>
+                                      (v == null || v.trim().isEmpty) ? 'Ingresa un título' : null,
+                                ),
+
+                                const SizedBox(height: 16),
+                                Text("Descripción", style: const TextStyle(fontWeight: FontWeight.w500)),
+                                TextFormField(
+                                  controller: descCtrl,
+                                  maxLines: 3,
+                                  decoration: const InputDecoration(
+                                    hintText: 'Cuéntales detalles de la actividad',
+                                    prefixIcon: Icon(Icons.description_outlined),
+                                    border: OutlineInputBorder(),
+                                  ),
+                                ),
+
+                                const SizedBox(height: 16),
+                                Text("Máximo de participantes", style: const TextStyle(fontWeight: FontWeight.w500)),
+                                TextFormField(
+                                  controller: maxPlayersCtrl,
+                                  keyboardType: TextInputType.number,
+                                  decoration: const InputDecoration(
+                                    hintText: 'Ej. 10',
+                                    prefixIcon: Icon(Icons.people_outline),
+                                    border: OutlineInputBorder(),
+                                  ),
+                                  validator: (v) {
+                                    if (v == null || v.trim().isEmpty) return null;
+                                    final n = num.tryParse(v);
+                                    if (n == null || n <= 0) return 'Número inválido';
+                                    return null;
+                                  },
+                                ),
+
+                                const SizedBox(height: 16),
+                                Text("Nivel", style: const TextStyle(fontWeight: FontWeight.w500)),
+                                DropdownButtonFormField<String>(
+                                  initialValue: level,
+                                  decoration: const InputDecoration(
+                                    border: OutlineInputBorder(),
+                                    prefixIcon: Icon(Icons.fitness_center),
+                                    hintText: 'Selecciona un nivel',
+                                  ),
+                                  items: ['Principiante', 'Intermedio', 'Avanzado']
+                                      .map((l) =>
+                                          DropdownMenuItem(value: l, child: Text(l)))
+                                      .toList(),
+                                  onChanged: (v) => setState(() => level = v),
+                                  validator: (v) =>
+                                      v == null ? 'Selecciona un nivel' : null,
+                                ),
+
+                                const SizedBox(height: 24),
+                                FilledButton(
+                                  onPressed: () => _next(1),
+                                  child: const Text('Siguiente'),
+                                ),
+                              ],
+                            ),
                           ),
-                          validator: (v) =>
-                              (v == null || v.trim().isEmpty) ? 'Ingresa un título' : null,
                         ),
-
-                        const SizedBox(height: 12),
-                        TextFormField(
-                          controller: descCtrl,
-                          maxLines: 3,
-                          decoration: const InputDecoration(
-                            labelText: 'Descripción',
-                            hintText: 'Cuéntales detalles de la actividad',
-                          ),
-                        ),
-
-                        const SizedBox(height: 12),
-                        TextFormField(
-                          controller: maxPlayersCtrl,
-                          keyboardType: TextInputType.number,
-                          decoration: const InputDecoration(
-                            labelText: 'Máximo de participantes',
-                            hintText: 'Ej. 10',
-                          ),
-                          validator: (v) {
-                            if (v == null || v.trim().isEmpty) return null;
-                            final n = num.tryParse(v);
-                            if (n == null || n <= 0) return 'Número inválido';
-                            return null;
-                          },
-                        ),
-
-                        const SizedBox(height: 12),
-                        DropdownButtonFormField<String>(
-                          value: level,
-                          decoration: const InputDecoration(labelText: 'Nivel'),
-                          items: levels
-                              .map((l) => DropdownMenuItem(value: l, child: Text(l)))
-                              .toList(),
-                          onChanged: (v) => setState(() => level = v),
-                          validator: (v) => v == null ? 'Selecciona un nivel' : null,
-                        ),
-
-                        const Spacer(),
-                        FilledButton(onPressed: () => _next(1), child: const Text('Siguiente')),
-                      ],
-                    ),
+                      );
+                    },
                   ),
                 ),
+
 
                 // PASO 2
                 Padding(
                   padding: const EdgeInsets.all(16),
-                  child: Form(
-                    key: _form2,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        LinearProgressIndicator(value: 2 / 3),
-                        const SizedBox(height: 16),
-
-                        ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          title: const Text('Fecha'),
-                          subtitle: Text(
-                            _date != null
-                                ? '${_date!.day}/${_date!.month}/${_date!.year}'
-                                : 'Selecciona fecha',
-                          ),
-                          trailing: const Icon(Icons.calendar_today),
-                          onTap: _pickDate,
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      return SingleChildScrollView(
+                        padding: EdgeInsets.only(
+                          bottom: MediaQuery.of(context).viewInsets.bottom + 16,
                         ),
-                        const SizedBox(height: 4),
-                        ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          title: const Text('Hora'),
-                          subtitle:
-                              Text(_time != null ? _time!.format(context) : 'Selecciona hora'),
-                          trailing: const Icon(Icons.access_time),
-                          onTap: _pickTime,
-                        ),
-
-                        const SizedBox(height: 12),
-                        TextFormField(
-                          controller: placeNameCtrl,
-                          decoration: const InputDecoration(
-                            labelText: 'Lugar (place_name)',
-                            hintText: 'Ej. Estadio Municipal, Cancha 2',
-                          ),
-                          validator: (v) =>
-                              (v == null || v.trim().isEmpty) ? 'Ingresa el lugar' : null,
-                        ),
-
-                        const SizedBox(height: 12),
-                        TextFormField(
-                          controller: formattedAddrCtrl,
-                          decoration: const InputDecoration(
-                            labelText: 'Dirección (formatted_address)',
-                            hintText: 'Ej. Viña del Mar, Chile',
-                          ),
-                          validator: (v) => (v == null || v.trim().isEmpty)
-                              ? 'Ingresa la dirección'
-                              : null,
-                        ),
-
-                        const SizedBox(height: 12),
-                        TextFormField(
-                          controller: activityLocCtrl,
-                          decoration: const InputDecoration(
-                            labelText: 'Referencia (activity_location)',
-                            hintText: 'Indoor / Outdoor / Cancha techada… (opcional)',
-                          ),
-                        ),
-
-                        const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: TextFormField(
-                                controller: latCtrl,
-                                keyboardType: TextInputType.number,
-                                decoration: const InputDecoration(
-                                  labelText: 'Lat (opcional)',
+                        child: ConstrainedBox(
+                          constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                          child: Form(
+                            key: _form2,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                LinearProgressIndicator(value: 2 / 3),
+                                const SizedBox(height: 20),
+                                Text('📍 ¿Cuándo y dónde?', style: Theme.of(context).textTheme.titleLarge),
+                                const SizedBox(height: 20),
+                                Text("Fecha", style: const TextStyle(fontWeight: FontWeight.w500)),
+                                TextFormField(
+                                  readOnly: true,
+                                  decoration: const InputDecoration(
+                                    hintText: 'Selecciona la fecha',
+                                    prefixIcon: Icon(Icons.calendar_today),
+                                    border: OutlineInputBorder(),
+                                  ),
+                                  controller: TextEditingController(
+                                    text: _date == null
+                                        ? ''
+                                        : '${_date!.day}/${_date!.month}/${_date!.year}',
+                                  ),
+                                  onTap: _pickDate,
+                                  validator: (_) => _date == null ? 'Selecciona la fecha' : null,
                                 ),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: TextFormField(
-                                controller: lngCtrl,
-                                keyboardType: TextInputType.number,
-                                decoration: const InputDecoration(
-                                  labelText: 'Lng (opcional)',
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
 
-                        const SizedBox(height: 12),
-                        TextFormField(
-                          controller: googlePlaceIdCtrl,
-                          decoration: const InputDecoration(
-                            labelText: 'Google Place ID (opcional)',
+                                const SizedBox(height: 16),
+                                Text("Hora", style: const TextStyle(fontWeight: FontWeight.w500)),
+                                TextFormField(
+                                  readOnly: true,
+                                  decoration: const InputDecoration(
+                                    hintText: 'Selecciona la hora',
+                                    border: OutlineInputBorder(),
+                                    prefixIcon: Icon(Icons.access_time),
+                                  ),
+                                  controller: TextEditingController(
+                                    text: _time == null ? '' : _time!.format(context),
+                                  ),
+                                  onTap: _pickTime,
+                                  validator: (_) => _time == null ? 'Selecciona la hora' : null,
+                                ),
+
+                                const SizedBox(height: 16),
+                                Text("Ubicación", style: const TextStyle(fontWeight: FontWeight.w500)),
+                                TextFormField(
+                                  readOnly: true,
+                                  decoration: const InputDecoration(
+                                    hintText: 'Selecciona la ubicación',
+                                    border: OutlineInputBorder(),
+                                    prefixIcon: Icon(Icons.place),
+                                  ),
+                                  controller: formattedAddrCtrl,
+                                  onTap: _openPlacePicker,
+                                  validator: (v) =>
+                                      (v == null || v.trim().isEmpty) ? 'Selecciona la ubicación' : null,
+                                ),
+
+                                const SizedBox(height: 16),
+                                Text("Referencias (Opcional)", style: const TextStyle(fontWeight: FontWeight.w500)),
+                                TextFormField(
+                                  controller: activityLocCtrl,
+                                  maxLines: 2,
+                                  decoration: const InputDecoration(
+                                    hintText: 'Ej: Cancha 2, sector norte...',
+                                    border: OutlineInputBorder(),
+                                    prefixIcon: Icon(Icons.comment)
+                                  ),
+                                ),
+
+                                const SizedBox(height: 24),
+                                FilledButton(onPressed: () => _next(2), child: const Text('Siguiente')),
+                              ],
+                            ),
                           ),
                         ),
-
-                        const Spacer(),
-                        FilledButton(onPressed: () => _next(2), child: const Text('Siguiente')),
-                      ],
-                    ),
+                      );
+                    },
                   ),
                 ),
 
-                // PASO 3
-                Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Form(
-                    key: _form3,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        LinearProgressIndicator(value: 3 / 3),
-                        const SizedBox(height: 16),
-                        Text('Preguntas específicas',
-                            style: Theme.of(context).textTheme.titleMedium),
-                        const SizedBox(height: 8),
-                        if ((_sport?.fields ?? const []).isEmpty)
-                          const Text('Este deporte no requiere campos adicionales.'),
-                        ...dynamicFields.map((f) => _buildDynamicField(f)),
-                        const Spacer(),
-                        FilledButton.icon(
-                          onPressed: _saving ? null : _publish,
-                          icon: const Icon(Icons.check),
-                          label: const Text('Publicar actividad'),
+
+              // PASO 3
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    return SingleChildScrollView(
+                      padding: EdgeInsets.only(
+                        bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+                      ),
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                        child: Form(
+                          key: _form3,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              LinearProgressIndicator(value: 3 / 3),
+                              const SizedBox(height: 20),
+                              Text('📝 Preguntas adicionales', style: Theme.of(context).textTheme.titleLarge),
+                              const SizedBox(height: 4),
+                              if ((_sport?.fields ?? const []).isEmpty)
+                                const Text('Este deporte no requiere campos adicionales.')
+                              else
+                                ...dynamicFields.map((f) => _buildDynamicField(f)),
+
+                              const SizedBox(height: 24),
+                              FilledButton.icon(
+                                onPressed: _saving ? null : _publish,
+                                icon: const Icon(Icons.check),
+                                label: const Text('Publicar actividad'),
+                              ),
+                            ],
+                          ),
                         ),
-                      ],
-                    ),
-                  ),
+                      ),
+                    );
+                  },
                 ),
+              ),
+
               ],
             ),
             if (_saving)
@@ -454,18 +529,22 @@ class _CreateActivityScreenState extends State<CreateActivityScreen> {
     final value = dynamicAnswers[f.key];
     switch (f.type) {
       case 'boolean':
-        return SwitchListTile(
-          title: Text(f.label),
-          value: (value as bool?) ?? false,
-          onChanged: (v) => setState(() => dynamicAnswers[f.key] = v),
+        return Padding(
+          padding: const EdgeInsets.only(top: 16),
+          child: SwitchListTile(
+            title: Text(f.label),
+            value: (value as bool?) ?? false,
+            onChanged: (v) => setState(() => dynamicAnswers[f.key] = v),
+          ),
         );
+
 
       case 'select':
         return Padding(
-          padding: const EdgeInsets.only(top: 12),
+          padding: const EdgeInsets.only(top: 16),
           child: DropdownButtonFormField<String>(
-            value: (value as String?),
-            decoration: InputDecoration(labelText: f.label),
+            initialValue: (value as String?),
+            decoration: InputDecoration(labelText: f.label, border: const OutlineInputBorder()),
             items: f.options.map((o) => DropdownMenuItem(value: o, child: Text(o))).toList(),
             onChanged: (v) => setState(() => dynamicAnswers[f.key] = v),
             validator: (v) =>
@@ -475,11 +554,11 @@ class _CreateActivityScreenState extends State<CreateActivityScreen> {
 
       case 'number':
         return Padding(
-          padding: const EdgeInsets.only(top: 12),
+          padding: const EdgeInsets.only(top: 16),
           child: TextFormField(
             initialValue: value?.toString(),
             keyboardType: TextInputType.number,
-            decoration: InputDecoration(labelText: f.label),
+            decoration: InputDecoration(labelText: f.label, border: const OutlineInputBorder()),
             validator: (v) {
               if (f.required && (v == null || v.trim().isEmpty)) return 'Requerido';
               if (v == null || v.isEmpty) return null;
@@ -498,12 +577,277 @@ class _CreateActivityScreenState extends State<CreateActivityScreen> {
           padding: const EdgeInsets.only(top: 12),
           child: TextFormField(
             initialValue: value?.toString(),
-            decoration: InputDecoration(labelText: f.label),
+            decoration: InputDecoration(labelText: f.label, border: const OutlineInputBorder()),
             validator: (v) =>
                 (f.required && (v == null || v.trim().isEmpty)) ? 'Requerido' : null,
             onChanged: (v) => dynamicAnswers[f.key] = v,
           ),
         );
     }
+  }
+}
+
+// ---------- Picker con mapa + autocomplete (VERSIÓN ROBUSTA) ----------
+Future<PickedPlace?> showPlacePicker(BuildContext context) {
+  return showModalBottomSheet<PickedPlace>(
+    context: context,
+    isScrollControlled: true,
+    useSafeArea: true,
+    builder: (_) => const _PlacePickerSheet(),
+  );
+}
+
+class _PlacePickerSheet extends StatefulWidget {
+  const _PlacePickerSheet();
+  @override
+  State<_PlacePickerSheet> createState() => _PlacePickerSheetState();
+}
+
+class _PlacePickerSheetState extends State<_PlacePickerSheet> {
+  late final places.FlutterGooglePlacesSdk _places;
+  final _searchCtrl = TextEditingController();
+
+  final _mapC = Completer<gmaps.GoogleMapController>();
+
+  // Centro y bounds de Chile
+  static const gmaps.LatLng _chileCenter = gmaps.LatLng(-33.45, -70.66); // Stgo aprox
+  static final gmaps.LatLngBounds _chileBounds = gmaps.LatLngBounds(
+    southwest: const gmaps.LatLng(-56.0, -76.0),
+    northeast: const gmaps.LatLng(-17.5, -66.0),
+  );
+
+  // Estado del mapa y selección
+  gmaps.Marker? _marker;
+  gmaps.LatLng _cameraCenter = _chileCenter;
+
+  // Autocomplete
+  List<places.AutocompletePrediction> _pred = [];
+  String? _selectedPlaceId;   // placeId cuando viene del autocomplete
+  String? _selectedName;      // título (arriba)
+  String? _selectedAddress;   // dirección (abajo)
+
+  // UI
+  bool _confirming = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // ⚠️ API KEY (misma que en el Manifest). Ideal mover a dotenv en prod.
+    _places = places.FlutterGooglePlacesSdk('AIzaSyAfUpOvL3qbhlRCiE8ETxnzvQGyAENraeQ');
+  }
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  // === Autocomplete: restringido a Chile ===
+  Future<void> _onChangedSearch(String v) async {
+    if (v.trim().isEmpty) {
+      setState(() {
+        _pred = [];
+        _selectedPlaceId = null;
+        _selectedName = null;
+        _selectedAddress = null;
+      });
+      return;
+    }
+    final res = await _places.findAutocompletePredictions(
+      v,
+      countries: const ['cl'], // 🔒 solo Chile
+    );
+    setState(() {
+      _pred = res.predictions;
+      _selectedPlaceId = null; // aún no hay selección
+      _selectedName = null;
+      _selectedAddress = null;
+    });
+  }
+
+  Future<void> _selectPrediction(places.AutocompletePrediction p) async {
+    final details = await _places.fetchPlace(
+      p.placeId,
+      fields: const [
+        places.PlaceField.Location,
+        places.PlaceField.Name,
+        places.PlaceField.Address,
+        places.PlaceField.Id,
+      ],
+    );
+
+    final place = details.place;
+    final loc = place?.latLng;
+    if (place == null || loc == null) return;
+
+    final pos = gmaps.LatLng(loc.lat, loc.lng);
+    final controller = _mapC.isCompleted ? await _mapC.future : null;
+
+    setState(() {
+      _marker = gmaps.Marker(markerId: const gmaps.MarkerId('picked'), position: pos);
+
+      // Guarda nombre y dirección por separado
+      _selectedName = place.name ?? p.primaryText;
+      _selectedAddress = place.address ?? p.fullText;
+
+      // (Opcional) mostrar ambos en el input
+      _searchCtrl.text = "${_selectedName ?? ''}, ${_selectedAddress ?? ''}";
+
+      _pred = [];
+      _selectedPlaceId = place.id; // 👈 guardamos el id
+      _cameraCenter = pos;
+    });
+
+    if (controller != null) {
+      await controller.animateCamera(gmaps.CameraUpdate.newLatLngZoom(pos, 16));
+    }
+  }
+
+  Future<void> _confirm() async {
+    if (!mounted || _confirming) return;
+    setState(() => _confirming = true);
+
+    try {
+      // Si hay marcador, usamos su posición; si no, el centro actual de la cámara.
+      final pos = _marker?.position ?? _cameraCenter;
+
+      // Si viene de autocomplete, usamos lo guardado; si no, lo que haya en el input
+      final placeName = (_selectedName != null && _selectedName!.trim().isNotEmpty)
+          ? _selectedName!
+          : _searchCtrl.text;
+
+      final formattedAddress = (_selectedAddress != null && _selectedAddress!.trim().isNotEmpty)
+          ? _selectedAddress!
+          : _searchCtrl.text;
+
+      Navigator.pop(
+        context,
+        PickedPlace(
+          placeName: placeName,                 // título (arriba)
+          formattedAddress: formattedAddress,   // dirección (abajo)
+          lat: pos.latitude,
+          lng: pos.longitude,
+          placeId: _selectedPlaceId,            // null si fue tap manual
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _confirming = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final height = MediaQuery.of(context).size.height * 0.85;
+
+    return SizedBox(
+      height: height,
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+            child: TextField(
+              controller: _searchCtrl,
+              decoration: const InputDecoration(
+                hintText: 'Buscar lugar…',
+                prefixIcon: Icon(Icons.search),
+              ),
+              onChanged: _onChangedSearch,
+            ),
+          ),
+
+          if (_pred.isNotEmpty)
+            Expanded(
+              child: ListView.separated(
+                itemCount: _pred.length,
+                separatorBuilder: (_, __) => const Divider(height: 1),
+                itemBuilder: (_, i) {
+                  final p = _pred[i];
+                  return ListTile(
+                    leading: const Icon(Icons.place),
+                    title: Text(p.fullText ?? p.primaryText),
+                    subtitle: p.secondaryText == null ? null : Text(p.secondaryText!),
+                    onTap: () => _selectPrediction(p),
+                  );
+                },
+              ),
+            )
+          else
+            Expanded(
+              child: Stack(
+                children: [
+                  gmaps.GoogleMap(
+                    initialCameraPosition: const gmaps.CameraPosition(
+                      target: _chileCenter,
+                      zoom: 5.5,
+                    ),
+                    cameraTargetBounds: gmaps.CameraTargetBounds(_chileBounds), // 🔒 Chile
+                    minMaxZoomPreference: const gmaps.MinMaxZoomPreference(4, 18),
+
+                    // Trackea el centro de la cámara (evita usar getLatLng)
+                    onCameraMove: (camPos) {
+                      _cameraCenter = camPos.target;
+                    },
+
+                    myLocationButtonEnabled: true,
+                    myLocationEnabled: false,
+
+                    onMapCreated: (c) {
+                      if (!_mapC.isCompleted) _mapC.complete(c);
+                    },
+
+                    markers: {if (_marker != null) _marker!},
+
+                    onTap: (pos) async {
+                      final controller = _mapC.isCompleted ? await _mapC.future : null;
+                      setState(() {
+                        _marker = gmaps.Marker(
+                          markerId: const gmaps.MarkerId('picked'),
+                          position: pos,
+                        );
+                        // Tap manual → sin datos de autocomplete
+                        _selectedPlaceId = null;
+                        _selectedName = null;
+                        _selectedAddress = null;
+                        _cameraCenter = pos;
+                      });
+                      if (controller != null) {
+                        await controller.animateCamera(gmaps.CameraUpdate.newLatLng(pos));
+                      }
+                    },
+                  ),
+
+                  // Pin visual centrado (no intercepta toques)
+                  const IgnorePointer(
+                    child: Center(
+                      child: Icon(Icons.place, size: 36, color: Colors.redAccent),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+            child: Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: _confirming ? null : () => Navigator.pop(context),
+                    child: const Text('Cancelar'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: FilledButton(
+                    onPressed: _confirming ? null : _confirm,
+                    child: Text(_confirming ? 'Guardando…' : 'Usar esta ubicación'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

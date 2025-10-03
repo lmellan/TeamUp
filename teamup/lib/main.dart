@@ -17,6 +17,7 @@ import '/ui/profile_screen.dart';
 import '/ui/explore_screen.dart';
 import '/ui/view_activity_screen.dart';
 import '/ui/edit_profile_screen.dart';
+import '/ui/create_activity_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();

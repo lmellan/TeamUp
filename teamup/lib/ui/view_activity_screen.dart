@@ -91,11 +91,13 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
       final parts = await widget.participantSvc.listByActivity(a.id!);
       _participants = parts;
 
-      final userIds = parts.map((p) => p.userId).toSet().toList();
-      if (a.creatorId != null) userIds.add(a.creatorId!);
-      final profiles = await widget.profileSvc.listByIds(userIds);
-      _profileById = {for (final p in profiles) p.id: p};
-      _owner = a.creatorId == null ? null : _profileById[a.creatorId!];
+      final userIds = parts.map((p) => p.userId).toSet();
+      userIds.add(a.creatorId); // a.creatorId es no-null
+
+      final profiles = await widget.profileSvc.listByIds(userIds.toList());
+      _profileById = { for (final p in profiles) p.id: p };
+
+      _owner = _profileById[a.creatorId];
 
       if (mounted) setState(() {});
     } finally {
@@ -138,7 +140,6 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
           }
           return;
         }
- 
         await widget.participantSvc.join(
           _a!.id!,
           _me!.id,
@@ -155,6 +156,10 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  void _goToExplore() {
+    Navigator.of(context).pushNamedAndRemoveUntil('/explore', (route) => false);
   }
 
   @override
@@ -181,125 +186,134 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
 
     final showJoin = !_iAmOwner;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Detalles de la actividad'),
-        centerTitle: true,
-      ),
-      body: RefreshIndicator(
-        onRefresh: _load,
-        child: ListView(
-          children: [
-            Container(
-              height: 180,
-              color: cs.primaryContainer.withOpacity(0.35),
-              alignment: Alignment.center,
-              child: Icon(Icons.image, size: 48, color: cs.onPrimaryContainer),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title, style: t.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
-                  const SizedBox(height: 6),
-                  Text(sportLabel, style: t.bodyMedium?.copyWith(color: cs.primary)),
-                  const SizedBox(height: 14),
-
-                  if (owner != null) ...[
-                    Row(
-                      children: [
-                        CircleAvatar(
-                          radius: 14,
-                          backgroundColor: cs.primary.withOpacity(0.2),
-                          child: Text(
-                            _s(owner.name).isNotEmpty
-                                ? _s(owner.name).substring(0, 1).toUpperCase()
-                                : 'U',
-                            style: t.titleSmall?.copyWith(color: cs.primary),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Text('Organiza ${_s(owner.name).isEmpty ? 'alguien' : _s(owner.name)}',
-                            style: t.bodySmall),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                  ],
-
-                  if (place.isNotEmpty) ...[
-                    _IconRow(icon: Icons.location_on, text: place),
-                    const SizedBox(height: 10),
-                  ],
-                  _IconRow(icon: Icons.calendar_today, text: dateText),
-                  const SizedBox(height: 10),
-                  _IconRow(
-                    icon: Icons.groups,
-                    text: max > 0 ? '$_joinedCount/$max participantes' : '$_joinedCount participantes',
-                  ),
-                  if (_s(a.description).isNotEmpty) ...[
-                    const SizedBox(height: 10),
-                    _IconRow(icon: Icons.notes, text: _s(a.description)),
-                  ],
-
-                  const SizedBox(height: 16),
-
-                  if (showJoin)
-                    SizedBox(
-                      width: double.infinity,
-                      child: FilledButton(
-                        onPressed: (_busy || (_iAmJoined == false && disableReason != null))
-                            ? null
-                            : _toggleJoin,
-                        child: Text(_iAmJoined
-                            ? (_busy ? 'Saliendo...' : 'Salir')
-                            : (_busy
-                                ? 'Uniendo...'
-                                : (disableReason == null ? 'Unirme' : disableReason))),
-                      ),
-                    ),
-
-                  const SizedBox(height: 24),
-
-                  Text('Participantes',
-                      style: t.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 8),
-
-                  if (_participants.isEmpty)
-                    Text('Aún no hay participantes.',
-                        style: t.bodySmall?.copyWith(color: cs.outline))
-                  else
-                    ..._participants.map((p) {
-                      final prof = _profileById[p.userId];
-                      final name = _s(prof?.name);
-                      final avatar = _s(prof?.avatarUrl);
-                      final isOwner = p.userId == a.creatorId;
-
-                      // 👇 etiqueta según enum + owner
-                      final roleLabel = isOwner
-                          ? 'Organizador'
-                          : (p.role == ParticipantRole.coordinador ? 'Organizador' : 'Miembro');
-
-                      return ListTile(
-                        leading: CircleAvatar(
-                          backgroundColor: cs.primary.withOpacity(0.2),
-                          backgroundImage: avatar.isNotEmpty ? NetworkImage(avatar) : null,
-                          child: avatar.isEmpty
-                              ? Text(
-                                  name.isNotEmpty ? name.substring(0, 1).toUpperCase() : 'U',
-                                  style: t.titleMedium?.copyWith(color: cs.primary),
-                                )
-                              : null,
-                        ),
-                        title: Text(name.isNotEmpty ? name : 'Usuario'),
-                        subtitle: Text(roleLabel),
-                        dense: true,
-                      );
-                    }),
-                ],
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        _goToExplore();
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Detalles de la actividad'),
+          centerTitle: true,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: _goToExplore,
+          ),
+        ),
+        body: RefreshIndicator(
+          onRefresh: _load,
+          child: ListView(
+            children: [
+              Container(
+                height: 180,
+                color: cs.primary.withValues(alpha: 0.35),
+                alignment: Alignment.center,
+                child: Icon(Icons.image, size: 48, color: cs.onPrimaryContainer),
               ),
-            ),
-          ],
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title, style: t.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 6),
+                    Text(sportLabel, style: t.bodyMedium?.copyWith(color: cs.primary)),
+                    const SizedBox(height: 14),
+
+                    if (owner != null) ...[
+                      Row(
+                        children: [
+                          CircleAvatar(
+                            radius: 14,
+                            backgroundColor: cs.primary.withValues(alpha: 0.2),
+                            child: Text(
+                              _s(owner.name).isNotEmpty
+                                  ? _s(owner.name).substring(0, 1).toUpperCase()
+                                  : 'U',
+                              style: t.titleSmall?.copyWith(color: cs.primary),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text('Organiza ${_s(owner.name).isEmpty ? 'alguien' : _s(owner.name)}',
+                              style: t.bodySmall),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                    ],
+
+                    if (place.isNotEmpty) ...[
+                      _IconRow(icon: Icons.location_on, text: place),
+                      const SizedBox(height: 10),
+                    ],
+                    _IconRow(icon: Icons.calendar_today, text: dateText),
+                    const SizedBox(height: 10),
+                    _IconRow(
+                      icon: Icons.groups,
+                      text: max > 0 ? '$_joinedCount/$max participantes' : '$_joinedCount participantes',
+                    ),
+                    if (_s(a.description).isNotEmpty) ...[
+                      const SizedBox(height: 10),
+                      _IconRow(icon: Icons.notes, text: _s(a.description)),
+                    ],
+
+                    const SizedBox(height: 16),
+
+                    if (showJoin)
+                      SizedBox(
+                        width: double.infinity,
+                        child: FilledButton(
+                          onPressed: (_busy || (_iAmJoined == false && disableReason != null))
+                              ? null
+                              : _toggleJoin,
+                          child: Text(_iAmJoined
+                            ? (_busy ? 'Saliendo...' : 'Salir')
+                            : (_busy ? 'Uniendo...' : (disableReason ?? 'Unirme'))),
+
+                        ),
+                      ),
+
+                    const SizedBox(height: 24),
+
+                    Text('Participantes',
+                        style: t.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 8),
+
+                    if (_participants.isEmpty)
+                      Text('Aún no hay participantes.',
+                          style: t.bodySmall?.copyWith(color: cs.outline))
+                    else
+                      ..._participants.map((p) {
+                        final prof = _profileById[p.userId];
+                        final name = _s(prof?.name);
+                        final avatar = _s(prof?.avatarUrl);
+                        final isOwner = p.userId == a.creatorId;
+
+                        final roleLabel = isOwner
+                            ? 'Organizador'
+                            : (p.role == ParticipantRole.coordinador ? 'Organizador' : 'Miembro');
+
+                        return ListTile(
+                          leading: CircleAvatar(
+                            backgroundColor: cs.primary.withValues(alpha: 0.2),
+                            backgroundImage: avatar.isNotEmpty ? NetworkImage(avatar) : null,
+                            child: avatar.isEmpty
+                                ? Text(
+                                    name.isNotEmpty ? name.substring(0, 1).toUpperCase() : 'U',
+                                    style: t.titleMedium?.copyWith(color: cs.primary),
+                                  )
+                                : null,
+                          ),
+                          title: Text(name.isNotEmpty ? name : 'Usuario'),
+                          subtitle: Text(roleLabel),
+                          dense: true,
+                        );
+                      }),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
