@@ -24,6 +24,7 @@ Future<void> main() async {
 
   // .env
   await dotenv.load(fileName: 'supabase.env');
+  await dotenv.load(fileName: ".env");
 
   // Intl: inicializa el MISMO locale que usarás en la app
   await initializeDateFormatting('es'); // o 'es_CL'

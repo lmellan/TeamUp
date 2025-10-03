@@ -14,7 +14,7 @@ import '../domain/services/deportes_services.dart';
 
 import '../data/deportes_data.dart';
 import '../data/actividad_data.dart';
-
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class CreateActivityScreen extends StatefulWidget {
   CreateActivityScreen({
@@ -633,7 +633,8 @@ class _PlacePickerSheetState extends State<_PlacePickerSheet> {
   void initState() {
     super.initState();
     // ⚠️ API KEY (misma que en el Manifest). Ideal mover a dotenv en prod.
-    _places = places.FlutterGooglePlacesSdk('AIzaSyAfUpOvL3qbhlRCiE8ETxnzvQGyAENraeQ');
+    final apiKey = dotenv.env['GOOGLE_MAPS_API_KEY'] ?? '';
+    _places = places.FlutterGooglePlacesSdk(apiKey);
   }
 
   @override
