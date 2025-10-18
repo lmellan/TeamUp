@@ -1,3 +1,6 @@
+// lib/ui/create_activity_screen.dart
+// Formulario dual: Crear y Editar actividad (según activityId)
+
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -11,6 +14,7 @@ import '../domain/entities/actividad.dart';
 import '../domain/entities/picked_place.dart';
 
 import '../domain/services/deportes_services.dart';
+import '../domain/services/actividad_services.dart';
 
 import '../data/deportes_data.dart';
 import '../data/actividad_data.dart';
@@ -19,10 +23,15 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 class CreateActivityScreen extends StatefulWidget {
   CreateActivityScreen({
     super.key,
+    this.activityId,                 // null => crear, no null => editar
     SportService? deportes,
-  }) : deportes = deportes ?? SportServiceSupabase();
+    ActivityService? activitySvc,
+  })  : deportes = deportes ?? SportServiceSupabase(),
+        activitySvc = activitySvc ?? ActivityServiceSupabase();
 
+  final String? activityId;
   final SportService deportes;
+  final ActivityService activitySvc;
 
   @override
   State<CreateActivityScreen> createState() => _CreateActivityScreenState();
@@ -31,6 +40,8 @@ class CreateActivityScreen extends StatefulWidget {
 class _CreateActivityScreenState extends State<CreateActivityScreen> {
   final _page = PageController();
   int _currentPage = 0;
+
+  bool get _isEdit => widget.activityId != null;
 
   void _goBack() {
     if (_currentPage == 0) {
@@ -74,10 +85,16 @@ class _CreateActivityScreenState extends State<CreateActivityScreen> {
 
   bool _saving = false;
 
+  // --- Edición ---
+  Activity? _original;   // actividad cargada para edición
+  String? _ownerId;
+
   @override
   void initState() {
     super.initState();
-    _fetchSports();
+    _fetchSports().then((_) {
+      if (_isEdit) _loadActivityForEdit();
+    });
   }
 
   Future<void> _fetchSports() async {
@@ -93,6 +110,70 @@ class _CreateActivityScreenState extends State<CreateActivityScreen> {
       setState(() => _loadingSports = false);
       ScaffoldMessenger.of(context)
           .showSnackBar(const SnackBar(content: Text('No se pudieron cargar los deportes')));
+    }
+  }
+
+  Future<void> _loadActivityForEdit() async {
+    try {
+      final id = widget.activityId!;
+      final a = await widget.activitySvc.getById(id);
+      if (a == null) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Actividad no encontrada')),
+        );
+        Navigator.of(context).pop();
+        return;
+      }
+
+      // seguridad: solo el creador puede editar
+      final currentUser = Supabase.instance.client.auth.currentUser?.id;
+      if (currentUser == null || currentUser != a.creatorId) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No tienes permisos para editar esta actividad')),
+        );
+        Navigator.of(context).pop();
+        return;
+      }
+
+      _original = a;
+      _ownerId = a.creatorId;
+
+      // Prefill controles
+      titleCtrl.text = a.title;
+      descCtrl.text  = a.description ?? '';
+      maxPlayersCtrl.text = (a.maxPlayers ?? 0) > 0 ? '${a.maxPlayers}' : '';
+
+      level = a.level;
+
+      // Fecha/Hora en local
+      final local = a.date.toLocal();
+      _date = DateTime(local.year, local.month, local.day);
+      _time = TimeOfDay(hour: local.hour, minute: local.minute);
+
+      // Ubicación
+      placeNameCtrl.text     = a.placeName ?? a.formattedAddress ?? '';
+      formattedAddrCtrl.text = a.formattedAddress ?? a.placeName ?? '';
+      activityLocCtrl.text   = a.activityLocation ?? '';
+      latCtrl.text           = a.lat?.toString() ?? '';
+      lngCtrl.text           = a.lng?.toString() ?? '';
+      googlePlaceIdCtrl.text = a.googlePlaceId ?? '';
+
+      // Deporte + campos dinámicos
+      _sport = _sports.where((s) => s.id == a.sportId).cast<Sport?>().firstOrNull ?? (_sports.isNotEmpty ? _sports.first : null);
+      dynamicFields = _sport?.fields ?? const [];
+      dynamicAnswers
+        ..clear()
+        ..addAll(a.fields);
+
+      if (mounted) setState(() {});
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No se pudo cargar la actividad: $e')),
+      );
+      Navigator.of(context).pop();
     }
   }
 
@@ -144,15 +225,15 @@ class _CreateActivityScreenState extends State<CreateActivityScreen> {
   }
 
   Future<void> _pickTime() async {
-  final picked = await showTimePicker(
-    context: context,
-    initialTime: _time ?? TimeOfDay.now(),
-    initialEntryMode: TimePickerEntryMode.input,
-  );
-  if (picked != null) {
-    setState(() => _time = picked);
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: _time ?? TimeOfDay.now(),
+      initialEntryMode: TimePickerEntryMode.input,
+    );
+    if (picked != null) {
+      setState(() => _time = picked);
+    }
   }
-}
 
   Future<void> _openPlacePicker() async {
     final picked = await showPlacePicker(context);
@@ -167,7 +248,7 @@ class _CreateActivityScreenState extends State<CreateActivityScreen> {
     }
   }
 
-  Future<void> _publish() async {
+  Future<void> _saveOrPublish() async {
     if (!(_form3.currentState?.validate() ?? false)) return;
     if (_sport == null) {
       _page.jumpToPage(0);
@@ -195,37 +276,74 @@ class _CreateActivityScreenState extends State<CreateActivityScreen> {
     final localDT = DateTime(_date!.year, _date!.month, _date!.day, _time!.hour, _time!.minute);
     final whenUtc = localDT.toUtc();
 
-    final activity = Activity(
-      sportId: _sport!.id,
-      creatorId: userId,
-      title: titleCtrl.text.trim(),
-      description: descCtrl.text.trim().isEmpty ? null : descCtrl.text.trim(),
-      status: 'activa',
-      date: whenUtc,
-      // ubicación
-      placeName: placeNameCtrl.text.trim(),
-      formattedAddress: formattedAddrCtrl.text.trim(),
-      activityLocation: activityLocCtrl.text.trim().isEmpty ? null : activityLocCtrl.text.trim(),
-      googlePlaceId: googlePlaceIdCtrl.text.trim().isEmpty ? null : googlePlaceIdCtrl.text.trim(),
-      lat: num.tryParse(latCtrl.text.trim())?.toDouble(),
-      lng: num.tryParse(lngCtrl.text.trim())?.toDouble(),
-      // otros
-      maxPlayers: num.tryParse(maxPlayersCtrl.text.trim())?.toInt(),
-      level: level,
-      fields: Map<String, dynamic>.from(dynamicAnswers),
-    );
-
     setState(() => _saving = true);
     try {
-      final created = await ActivityServiceSupabase().create(activity);
-      if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Actividad publicada: ${created.title}')));
-      Navigator.of(context).pushReplacementNamed('/detail-activity', arguments: created.id.toString());
+      if (_isEdit) {
+        // seguridad: dueño
+        if (_original == null || _original!.creatorId != userId) {
+          throw 'No tienes permisos para editar esta actividad';
+        }
+
+        final updated = Activity(
+          id: _original!.id,
+          sportId: _sport!.id,
+          creatorId: _original!.creatorId,
+          createdAt: _original!.createdAt,
+          title: titleCtrl.text.trim(),
+          description: descCtrl.text.trim().isEmpty ? null : descCtrl.text.trim(),
+          status: _original!.status,
+          date: whenUtc,
+          // ubicación
+          placeName: placeNameCtrl.text.trim().isEmpty ? null : placeNameCtrl.text.trim(),
+          formattedAddress: formattedAddrCtrl.text.trim().isEmpty ? null : formattedAddrCtrl.text.trim(),
+          activityLocation: activityLocCtrl.text.trim().isEmpty ? null : activityLocCtrl.text.trim(),
+          googlePlaceId: googlePlaceIdCtrl.text.trim().isEmpty ? null : googlePlaceIdCtrl.text.trim(),
+          lat: num.tryParse(latCtrl.text.trim())?.toDouble(),
+          lng: num.tryParse(lngCtrl.text.trim())?.toDouble(),
+          // otros
+          maxPlayers: num.tryParse(maxPlayersCtrl.text.trim())?.toInt(),
+          level: level,
+          fields: Map<String, dynamic>.from(dynamicAnswers),
+        );
+
+        await widget.activitySvc.update(_original!.id!, updated);
+
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Cambios guardados')),
+        );
+        Navigator.of(context).pop(true); // para refrescar detalle
+      } else {
+        final activity = Activity(
+          sportId: _sport!.id,
+          creatorId: userId,
+          title: titleCtrl.text.trim(),
+          description: descCtrl.text.trim().isEmpty ? null : descCtrl.text.trim(),
+          status: 'activa',
+          date: whenUtc,
+          // ubicación
+          placeName: placeNameCtrl.text.trim(),
+          formattedAddress: formattedAddrCtrl.text.trim(),
+          activityLocation: activityLocCtrl.text.trim().isEmpty ? null : activityLocCtrl.text.trim(),
+          googlePlaceId: googlePlaceIdCtrl.text.trim().isEmpty ? null : googlePlaceIdCtrl.text.trim(),
+          lat: num.tryParse(latCtrl.text.trim())?.toDouble(),
+          lng: num.tryParse(lngCtrl.text.trim())?.toDouble(),
+          // otros
+          maxPlayers: num.tryParse(maxPlayersCtrl.text.trim())?.toInt(),
+          level: level,
+          fields: Map<String, dynamic>.from(dynamicAnswers),
+        );
+
+        final created = await ActivityServiceSupabase().create(activity);
+        if (!mounted) return;
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Actividad publicada: ${created.title}')));
+        Navigator.of(context).pushReplacementNamed('/detail-activity', arguments: created.id.toString());
+      }
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Error al publicar: $e')));
+          .showSnackBar(SnackBar(content: Text('Error al guardar: $e')));
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -233,10 +351,9 @@ class _CreateActivityScreenState extends State<CreateActivityScreen> {
 
   @override
   Widget build(BuildContext context) {
-
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Crear actividad'),
+        title: Text(_isEdit ? 'Editar actividad' : 'Crear actividad'),
         leading: IconButton(icon: const Icon(Icons.chevron_left), onPressed: _goBack),
       ),
       body: AbsorbPointer(
@@ -266,11 +383,12 @@ class _CreateActivityScreenState extends State<CreateActivityScreen> {
                               children: [
                                 LinearProgressIndicator(value: 1 / 3),
                                 const SizedBox(height: 20),
-                                Text('🎯 ¿Qué actividad crearás?', style: Theme.of(context).textTheme.titleLarge),
+                                Text('🎯 ${_isEdit ? 'Actualiza tu actividad' : '¿Qué actividad crearás?'}',
+                                    style: Theme.of(context).textTheme.titleLarge),
                                 const SizedBox(height: 20),
                                 Text("Deporte", style: const TextStyle(fontWeight: FontWeight.w500)),
                                 DropdownButtonFormField<Sport>(
-                                  initialValue: _sport,
+                                  value: _sport,
                                   decoration: const InputDecoration(
                                     border: OutlineInputBorder(),
                                     prefixIcon: Icon(Icons.sports_soccer),
@@ -286,13 +404,24 @@ class _CreateActivityScreenState extends State<CreateActivityScreen> {
                                           .toList(),
                                   onChanged: _loadingSports
                                       ? null
-                                      : (s) {
-                                          setState(() {
-                                            _sport = s;
-                                            dynamicFields = s?.fields ?? const [];
-                                            dynamicAnswers.clear();
-                                          });
-                                        },
+                                      : (_isEdit // si no quieres permitir cambiar deporte en edición, descomenta esto
+                                          ? (s) {
+                                              // Permitir cambiar deporte en edición (opcional)
+                                              setState(() {
+                                                _sport = s;
+                                                dynamicFields = s?.fields ?? const [];
+                                                dynamicAnswers
+                                                  ..clear()
+                                                  ..addAll(_original?.fields ?? {});
+                                              });
+                                            }
+                                          : (s) {
+                                              setState(() {
+                                                _sport = s;
+                                                dynamicFields = s?.fields ?? const [];
+                                                dynamicAnswers.clear();
+                                              });
+                                            }),
                                   validator: (_) =>
                                       _sport == null ? 'Selecciona un deporte' : null,
                                 ),
@@ -347,7 +476,7 @@ class _CreateActivityScreenState extends State<CreateActivityScreen> {
                                 const SizedBox(height: 16),
                                 Text("Nivel", style: const TextStyle(fontWeight: FontWeight.w500)),
                                 DropdownButtonFormField<String>(
-                                  initialValue: level,
+                                  value: level,
                                   decoration: const InputDecoration(
                                     border: OutlineInputBorder(),
                                     prefixIcon: Icon(Icons.fitness_center),
@@ -375,7 +504,6 @@ class _CreateActivityScreenState extends State<CreateActivityScreen> {
                     },
                   ),
                 ),
-
 
                 // PASO 2
                 Padding(
@@ -468,47 +596,49 @@ class _CreateActivityScreenState extends State<CreateActivityScreen> {
                   ),
                 ),
 
+                // PASO 3
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      return SingleChildScrollView(
+                        padding: EdgeInsets.only(
+                          bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+                        ),
+                        child: ConstrainedBox(
+                          constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                          child: Form(
+                            key: _form3,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                LinearProgressIndicator(value: 3 / 3),
+                                const SizedBox(height: 20),
+                                Text('📝 Preguntas adicionales', style: Theme.of(context).textTheme.titleLarge),
+                                const SizedBox(height: 4),
+                                if ((_sport?.fields ?? const []).isEmpty)
+                                  const Text('Este deporte no requiere campos adicionales.')
+                                else
+                                  ...dynamicFields.map((f) => _buildDynamicField(f)),
 
-              // PASO 3
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    return SingleChildScrollView(
-                      padding: EdgeInsets.only(
-                        bottom: MediaQuery.of(context).viewInsets.bottom + 16,
-                      ),
-                      child: ConstrainedBox(
-                        constraints: BoxConstraints(minHeight: constraints.maxHeight),
-                        child: Form(
-                          key: _form3,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              LinearProgressIndicator(value: 3 / 3),
-                              const SizedBox(height: 20),
-                              Text('📝 Preguntas adicionales', style: Theme.of(context).textTheme.titleLarge),
-                              const SizedBox(height: 4),
-                              if ((_sport?.fields ?? const []).isEmpty)
-                                const Text('Este deporte no requiere campos adicionales.')
-                              else
-                                ...dynamicFields.map((f) => _buildDynamicField(f)),
-
-                              const SizedBox(height: 24),
-                              FilledButton.icon(
-                                onPressed: _saving ? null : _publish,
-                                icon: const Icon(Icons.check),
-                                label: const Text('Publicar actividad'),
-                              ),
-                            ],
+                                const SizedBox(height: 24),
+                                FilledButton.icon(
+                                  onPressed: _saving ? null : _saveOrPublish,
+                                  icon: Icon(_isEdit ? Icons.save : Icons.check),
+                                  label: Text(
+                                    _saving
+                                        ? (_isEdit ? 'Guardando…' : 'Publicando…')
+                                        : (_isEdit ? 'Guardar cambios' : 'Publicar actividad'),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
-                      ),
-                    );
-                  },
+                      );
+                    },
+                  ),
                 ),
-              ),
-
               ],
             ),
             if (_saving)
@@ -538,12 +668,11 @@ class _CreateActivityScreenState extends State<CreateActivityScreen> {
           ),
         );
 
-
       case 'select':
         return Padding(
           padding: const EdgeInsets.only(top: 16),
           child: DropdownButtonFormField<String>(
-            initialValue: (value as String?),
+            value: (value as String?),
             decoration: InputDecoration(labelText: f.label, border: const OutlineInputBorder()),
             items: f.options.map((o) => DropdownMenuItem(value: o, child: Text(o))).toList(),
             onChanged: (v) => setState(() => dynamicAnswers[f.key] = v),
@@ -851,4 +980,10 @@ class _PlacePickerSheetState extends State<_PlacePickerSheet> {
       ),
     );
   }
+}
+
+// ---------- Helpers ----------
+
+extension<T> on Iterable<T> {
+  T? get firstOrNull => isEmpty ? null : first;
 }

@@ -14,5 +14,7 @@ abstract class ActivityService {
  
   Future<List<Activity>> listByIds(List<String> ids, {bool ascending = true});
   Future<Activity?> getById(String id);   
-
+  Future<void> delete(String id);
+  Future<Activity> update(String id, Activity updated);
+  
 }

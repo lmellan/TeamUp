@@ -23,8 +23,8 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // .env
-  await dotenv.load(fileName: 'supabase.env');
-  await dotenv.load(fileName: ".env");
+  await dotenv.load(fileName: '.env');
+
 
   // Intl: inicializa el MISMO locale que usarás en la app
   await initializeDateFormatting('es'); // o 'es_CL'
@@ -73,15 +73,24 @@ class MyApp extends StatelessWidget {
         '/perfil': (_) => const ProfileScreen(),
         '/explore': (_) => ExploreScreen(),
         '/create-account': (_) => const CreateAccountScreen(),
-        '/create': (_) => CreateActivityScreen(), 
+        '/create': (context) {
+          final args = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>?;
+          final activityId = args?['activityId'] as String?; // null => crear, !null => editar
+          return CreateActivityScreen(activityId: activityId);
+        },
+        '/activity/edit': (context) {
+          final args = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>?;
+          final activityId = args?['activityId'] as String?;
+          return CreateActivityScreen(activityId: activityId);
+        },
         '/detail-activity': (context) {
           final id = ModalRoute.of(context)!.settings.arguments as String;
           return ActivityDetailScreen(activityId: id);
         },
-         '/edit-profile': (context) {
-                  final profile = ModalRoute.of(context)!.settings.arguments as Profile?;
-                  return EditProfileScreen(profile: profile);
-                },
+        '/edit-profile': (context) {
+          final profile = ModalRoute.of(context)!.settings.arguments as Profile?;
+          return EditProfileScreen(profile: profile);
+        },
 
       },
     );

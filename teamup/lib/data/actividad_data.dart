@@ -138,4 +138,36 @@ class ActivityServiceSupabase implements ActivityService {
 
     return _fromRow(row);
   }
+
+  
+
+  @override
+  Future<Activity> delete(String id) async {
+    final row = await Supabase.instance.client
+        .from( _tbl)
+        .delete()
+        .eq(_colId, id)
+        .select()
+        .maybeSingle();
+        
+    return _fromRow(row!);
+  }
+
+  @override
+  Future<Activity> update(String id, Activity updated) async {
+    // armamos el payload y evitamos sobreescribir columnas que no quieres tocar
+    final payload = _toRow(updated)
+      ..remove(_colId)
+      ..remove(_colCreatorId) // normalmente no cambias el dueño
+      ..remove(_colCreatedAt);
+
+    final row = await Supabase.instance.client
+        .from(_tbl)
+        .update(payload)
+        .eq(_colId, id)
+        .select()
+        .single();
+
+    return _fromRow(row);
+  }
 }

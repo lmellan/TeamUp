@@ -158,6 +158,64 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
     }
   }
 
+  Future<void> _confirmDelete() async {
+  if (_a == null) return;
+  final theme = Theme.of(context);
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (_) => AlertDialog(
+      title: const Text('Eliminar actividad'),
+      content: const Text(
+        '¿Seguro que deseas eliminar esta actividad? Esta acción no se puede deshacer.'
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text('Cancelar'),
+        ),
+        FilledButton(
+          style: FilledButton.styleFrom(
+            backgroundColor: theme.colorScheme.error,
+            foregroundColor: theme.colorScheme.onError,
+          ),
+          onPressed: () => Navigator.pop(context, true),
+          child: const Text('Eliminar'),
+        ),
+      ],
+    ),
+  );
+
+  if (ok != true) return;
+
+  setState(() => _busy = true);
+    try {
+      await widget.activitySvc.delete(widget.activityId);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Actividad eliminada'))
+        );
+        _goToExplore();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('No se pudo eliminar: $e'))
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  void _goToEdit() {
+    if (_a == null) return;
+    // Ajusta esta ruta/arguments a tu configuración de navegación.
+    Navigator.of(context).pushNamed(
+      '/activity/edit',
+      arguments: {'activityId': _a!.id},
+    );
+  }
+
   void _goToExplore() {
     Navigator.of(context).pushNamedAndRemoveUntil('/explore', (route) => false);
   }
@@ -259,19 +317,45 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
 
                     const SizedBox(height: 16),
 
-                    if (showJoin)
+                    if (_iAmOwner) ...[
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: _busy ? null : _goToEdit,
+                              icon: const Icon(Icons.edit),
+                              label: const Text('Editar actividad'),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: FilledButton.icon(
+                              onPressed: _busy ? null : _confirmDelete,
+                              icon: const Icon(Icons.delete),
+                              label: const Text('Eliminar'),
+                              style: FilledButton.styleFrom(
+                                backgroundColor: Theme.of(context).colorScheme.error,
+                                foregroundColor: Theme.of(context).colorScheme.onError,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ] else ...[
                       SizedBox(
                         width: double.infinity,
                         child: FilledButton(
                           onPressed: (_busy || (_iAmJoined == false && disableReason != null))
                               ? null
                               : _toggleJoin,
-                          child: Text(_iAmJoined
-                            ? (_busy ? 'Saliendo...' : 'Salir')
-                            : (_busy ? 'Uniendo...' : (disableReason ?? 'Unirme'))),
-
+                          child: Text(
+                            _iAmJoined
+                              ? (_busy ? 'Saliendo...' : 'Salir')
+                              : (_busy ? 'Uniendo...' : (disableReason ?? 'Unirme')),
+                          ),
                         ),
                       ),
+                    ],
 
                     const SizedBox(height: 24),
 
