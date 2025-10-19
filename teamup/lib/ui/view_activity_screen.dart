@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import '../componentes/map_preview.dart';
 
 import '../domain/entities/actividad.dart';
 import '../domain/entities/deportes.dart';
@@ -45,9 +46,11 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
 
   String _formatDate(DateTime dt) {
     try {
-      return _fmt.format(dt);
+      final formatted = _fmt.format(dt);
+      return formatted[0].toUpperCase() + formatted.substring(1);
     } catch (_) {
-      return DateFormat('dd/MM/yyyy, HH:mm').format(dt);
+      final fallback = DateFormat('dd/MM/yyyy, HH:mm').format(dt);
+      return fallback[0].toUpperCase() + fallback.substring(1);
     }
   }
 
@@ -235,12 +238,14 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
     final title = _s(a.title).isEmpty
         ? (_s(a.description).isEmpty ? 'Actividad' : _s(a.description))
         : _s(a.title);
-    final sportLabel =
-        s == null ? 'Actividad' : '${_s(s.iconEmoji).isEmpty ? '🎯' : _s(s.iconEmoji)} ${s.name}';
     final place = _s(a.placeName ?? a.formattedAddress);
     final dateText = _formatDate(a.date.toLocal());
     final max = a.maxPlayers ?? 0;
     final disableReason = _joinDisableReason();
+
+    final level = _s(a.level);                        
+    final locNote = _s(a.activityLocation);            
+    final Map<String, dynamic> fields = a.fields;
 
     final showJoin = !_iAmOwner;
 
@@ -267,7 +272,13 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
                 height: 180,
                 color: cs.primary.withValues(alpha: 0.35),
                 alignment: Alignment.center,
-                child: Icon(Icons.image, size: 48, color: cs.onPrimaryContainer),
+                child: Text(
+                  _s(s?.iconEmoji).isNotEmpty ? _s(s?.iconEmoji) : '🎯',
+                  style: TextStyle(
+                    fontSize: 48,
+                    color: cs.onPrimaryContainer,
+                  ),
+                ),
               ),
               Padding(
                 padding: const EdgeInsets.all(16),
@@ -276,9 +287,8 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
                   children: [
                     Text(title, style: t.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
                     const SizedBox(height: 6),
-                    Text(sportLabel, style: t.bodyMedium?.copyWith(color: cs.primary)),
-                    const SizedBox(height: 14),
-
+                    Text(_s(s?.name), style: t.bodyMedium?.copyWith(color: cs.primary)),
+                    const SizedBox(height: 16),
                     if (owner != null) ...[
                       Row(
                         children: [
@@ -299,11 +309,13 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
                       ),
                       const SizedBox(height: 10),
                     ],
-
-                    if (place.isNotEmpty) ...[
-                      _IconRow(icon: Icons.location_on, text: place),
-                      const SizedBox(height: 10),
-                    ],
+                    _IconRow(icon: Icons.emoji_events, text: level),
+                    const SizedBox(height: 10),
+                    _IconRow(
+                      icon: Icons.location_on,
+                      text: locNote.isNotEmpty ? '$place ($locNote)' : place,
+                    ),
+                    const SizedBox(height: 10),
                     _IconRow(icon: Icons.calendar_today, text: dateText),
                     const SizedBox(height: 10),
                     _IconRow(
@@ -314,7 +326,49 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
                       const SizedBox(height: 10),
                       _IconRow(icon: Icons.notes, text: _s(a.description)),
                     ],
-
+                    if (fields.isNotEmpty) ...[
+                      Theme(
+                        data: Theme.of(context).copyWith(
+                          dividerColor: Colors.transparent, // opcional, elimina línea gris
+                          listTileTheme: ListTileThemeData(
+                            dense: true,
+                            minLeadingWidth: 0, 
+                            iconColor: Theme.of(context).brightness == Brightness.dark
+                                ? Colors.white70
+                                : const Color(0xFF6B7280), // igual que muted
+                            textColor: Theme.of(context).colorScheme.onSurface,
+                          ),
+                        ),
+                        child: ExpansionTile(
+                          tilePadding: EdgeInsets.zero, 
+                          childrenPadding: const EdgeInsets.only(left: 16, right: 16, bottom: 12),
+                          leading: Icon(
+                            Icons.tune,
+                            color: Theme.of(context).brightness == Brightness.dark
+                                ? Colors.white70
+                                : const Color(0xFF6B7280),
+                          ),
+                          title: Text(
+                            'Detalles adicionales',
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodyLarge
+                                ?.copyWith(color: Theme.of(context).colorScheme.onSurface),
+                          ),
+                          children: [
+                            _FieldsList(fields: fields, sportCode: s?.name),
+                          ],
+                        ),
+                      ),
+                    ],
+                    if (place.isNotEmpty && a.lat != null && a.lng != null) ...[
+                      MapPreview(
+                        lat: a.lat!,
+                        lng: a.lng!,
+                        label: place,
+                        placeId: a.googlePlaceId,
+                      ),
+                    ],
                     const SizedBox(height: 16),
 
                     if (_iAmOwner) ...[
@@ -325,6 +379,16 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
                               onPressed: _busy ? null : _goToEdit,
                               icon: const Icon(Icons.edit),
                               label: const Text('Editar actividad'),
+                              style: FilledButton.styleFrom(
+                                backgroundColor: Theme.of(context).colorScheme.primary,
+                                side: BorderSide(color: Theme.of(context).colorScheme.primary),
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(50),
+                                ),
+                                padding: const EdgeInsets.symmetric(vertical: 14),
+                                minimumSize: const Size(0, 48),
+                              ),
                             ),
                           ),
                           const SizedBox(width: 12),
@@ -333,9 +397,12 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
                               onPressed: _busy ? null : _confirmDelete,
                               icon: const Icon(Icons.delete),
                               label: const Text('Eliminar'),
-                              style: FilledButton.styleFrom(
-                                backgroundColor: Theme.of(context).colorScheme.error,
-                                foregroundColor: Theme.of(context).colorScheme.onError,
+                              style: OutlinedButton.styleFrom(
+                                side: BorderSide(color: Theme.of(context).colorScheme.error),
+                                foregroundColor: Theme.of(context).colorScheme.error,
+                                backgroundColor: Colors.transparent,
+                                padding: const EdgeInsets.symmetric(vertical: 14), 
+                                minimumSize: const Size(0, 48),
                               ),
                             ),
                           ),
@@ -427,3 +494,47 @@ class _IconRow extends StatelessWidget {
     );
   }
 }
+
+class _FieldsList extends StatelessWidget {
+  final Map<String, dynamic> fields;
+  final String? sportCode; // por si quieres ordenar/renombrar por deporte
+
+  const _FieldsList({required this.fields, this.sportCode});
+
+  String _labelize(String raw) {
+    // convierte snake_case o camelCase a "Título Bonito"
+    final r = raw.replaceAll('_', ' ');
+    final withSpaces = RegExp(r'(?<=[a-z])([A-Z])').hasMatch(r)
+        ? r.replaceAllMapped(RegExp(r'(?<=[a-z])([A-Z])'), (m) => ' ${m.group(1)}')
+        : r;
+    return withSpaces.split(' ').map((w) {
+      if (w.isEmpty) return w;
+      return w[0].toUpperCase() + w.substring(1);
+    }).join(' ');
+  }
+
+  String _valueToText(dynamic v) {
+    if (v == null) return '—';
+    if (v is bool) return v ? 'Sí' : 'No';
+    return v.toString();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final entries = fields.entries.toList();
+    return Column(
+      children: entries.map((e) {
+        return ListTile(
+          dense: true,
+          contentPadding: EdgeInsets.zero,
+          title: Text(_labelize(e.key)),
+          trailing: Text(
+            _valueToText(e.value),
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
+        );
+      }).toList(),
+    );
+  }
+}
+
