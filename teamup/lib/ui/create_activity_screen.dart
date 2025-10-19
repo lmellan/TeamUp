@@ -838,10 +838,7 @@ class _PlacePickerSheetState extends State<_PlacePickerSheet> {
     setState(() => _confirming = true);
 
     try {
-      // Si hay marcador, usamos su posición; si no, el centro actual de la cámara.
       final pos = _marker?.position ?? _cameraCenter;
-
-      // Si viene de autocomplete, usamos lo guardado; si no, lo que haya en el input
       final placeName = (_selectedName != null && _selectedName!.trim().isNotEmpty)
           ? _selectedName!
           : _searchCtrl.text;
