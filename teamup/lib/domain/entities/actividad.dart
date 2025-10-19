@@ -1,26 +1,42 @@
 class Activity {
-  final String id;
-  final DateTime dateUtc;
+  final String? id;
   final String sportId;
-  final String status;
- 
-  final String? title;
+  final String creatorId;
+  final DateTime? createdAt;
+
+  final String title;
   final String? description;
-  final String? placeName;
-  final String? formattedAddress;
-  final String? creatorId;
+  final DateTime date;
   final int? maxPlayers;
 
+  final String? googlePlaceId;
+  final String? placeName;
+  final String? formattedAddress;
+  final double? lat;
+  final double? lng;
+  final String? activityLocation;
+
+  final String status;
+  final String? level;
+  final Map<String, dynamic> fields;
+
   const Activity({
-    required this.id,
-    required this.dateUtc,
+    this.id,
     required this.sportId,
+    required this.creatorId,
+    required this.date,
+    required this.title,
     required this.status,
-    this.title,
     this.description,
+    this.maxPlayers,
+    this.googlePlaceId,
     this.placeName,
     this.formattedAddress,
-    this.creatorId,
-    this.maxPlayers,
+    this.lat,
+    this.lng,
+    this.activityLocation,
+    this.level,
+    required this.fields,
+    this.createdAt,
   });
 }

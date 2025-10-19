@@ -450,7 +450,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
                       : (desc.isEmpty ? 'Sin título' : desc);
 
                   final place = _trimOrEmpty(a.placeName ?? a.formattedAddress);
-                  final dt = a.dateUtc.toLocal();
+                  final dt = a.date.toLocal();
 
                   return Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -506,8 +506,8 @@ class _FilterPill extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         decoration: BoxDecoration(
           color: Theme.of(context).brightness == Brightness.dark
-              ? cs.primary.withOpacity(0.15)
-              : cs.primaryContainer.withOpacity(0.8),
+              ? cs.primary.withValues(alpha: 0.15)
+              : cs.primaryContainer.withValues(alpha: 0.8),
           borderRadius: BorderRadius.circular(999),
         ),
         child: Row(

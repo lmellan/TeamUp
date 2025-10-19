@@ -15,14 +15,16 @@ import '/ui/complete_perfil_screen.dart';
 import '/ui/create_account_screen.dart';
 import '/ui/profile_screen.dart';
 import '/ui/explore_screen.dart';
-import '/ui/view_activity_screen.dart'; // ActivityDetailScreen
+import '/ui/view_activity_screen.dart';
 import '/ui/edit_profile_screen.dart';
+import '/ui/create_activity_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // .env
-  await dotenv.load(fileName: 'supabase.env');
+  await dotenv.load(fileName: '.env');
+
 
   // Intl: inicializa el MISMO locale que usarás en la app
   await initializeDateFormatting('es'); // o 'es_CL'
@@ -71,14 +73,24 @@ class MyApp extends StatelessWidget {
         '/perfil': (_) => const ProfileScreen(),
         '/explore': (_) => ExploreScreen(),
         '/create-account': (_) => const CreateAccountScreen(),
+        '/create': (context) {
+          final args = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>?;
+          final activityId = args?['activityId'] as String?; // null => crear, !null => editar
+          return CreateActivityScreen(activityId: activityId);
+        },
+        '/activity/edit': (context) {
+          final args = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>?;
+          final activityId = args?['activityId'] as String?;
+          return CreateActivityScreen(activityId: activityId);
+        },
         '/detail-activity': (context) {
           final id = ModalRoute.of(context)!.settings.arguments as String;
           return ActivityDetailScreen(activityId: id);
         },
-         '/edit-profile': (context) {
-                  final profile = ModalRoute.of(context)!.settings.arguments as Profile?;
-                  return EditProfileScreen(profile: profile);
-                },
+        '/edit-profile': (context) {
+          final profile = ModalRoute.of(context)!.settings.arguments as Profile?;
+          return EditProfileScreen(profile: profile);
+        },
 
       },
     );
