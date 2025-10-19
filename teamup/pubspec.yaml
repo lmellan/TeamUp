@@ -45,6 +45,7 @@ dependencies:
   google_maps_flutter: ^2.7.0         # Mapa
   uuid: ^4.4.0                # Para session tokens en autocomplete
   geolocator: ^12.0.0      # Geolocalización
+  url_launcher: ^6.3.0
 
   # Localización
   flutter_localizations:

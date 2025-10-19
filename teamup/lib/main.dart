@@ -53,7 +53,7 @@ class MyApp extends StatelessWidget {
       themeMode: ThemeMode.system,
 
       // Localización
-      locale: const Locale('es'), // usa 'es_CL' si prefieres
+      locale: const Locale('es'), 
       supportedLocales: const [
         Locale('es'),
         Locale('es', 'CL'),
