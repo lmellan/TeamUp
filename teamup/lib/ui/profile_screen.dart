@@ -120,27 +120,67 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     return Scaffold(
       appBar: AppBar(
+        leading: IconButton(
+          tooltip: 'Cerrar sesión',
+          icon: const Icon(Icons.logout_outlined, color: Color(0xFF689F38)),
+          onPressed: () {
+            showDialog(
+              context: context,
+              builder: (dialogContext) => AlertDialog(
+                title: const Text('Cerrar sesión'),
+                content: const Text('¿Segurx quieres cerrar sesión?'),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.of(dialogContext).pop(),
+                    child: const Text('No'),
+                  ),
+                  TextButton(
+                    onPressed: () async {
+                      Navigator.of(dialogContext).pop(); // cierra el modal
+                      setState(() => _loading = true);
+                      try {
+                        await _profileSvc.signOut();
+                        if (mounted) {
+                          Navigator.of(context).pushNamedAndRemoveUntil('/login', (r) => false);
+                        }
+                      } catch (e) {
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Error cerrando sesión: $e')),
+                          );
+                        }
+                      } finally {
+                        if (mounted) setState(() => _loading = false);
+                      }
+                    },
+                    child: const Text('Si'),
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
         title: const Text('Perfil'),
         centerTitle: true,
         actions: [
           IconButton(
-                    tooltip: 'Editar perfil',
-                    onPressed: () async {
-                      final result = await Navigator.pushNamed(
-                        context,
-                        '/edit-profile',
-                        arguments: _profile,
-                      );
-                      if (result == true) {
-                        // If the edit screen indicates a change, reload everything.
-                        await _loadAll();
-                        ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Perfil actualizado')), 
-                        );
-                      }
-                    },
-                    icon: const Icon(Icons.edit_outlined),
-                  ),
+            tooltip: 'Editar perfil',
+            onPressed: () async {
+              final result = await Navigator.pushNamed(
+                context,
+                '/edit-profile',
+                arguments: _profile,
+              );
+              if (result == true) {
+                // If the edit screen indicates a change, reload everything.
+                await _loadAll();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Perfil actualizado')),
+                );
+              }
+            },
+            icon: const Icon(Icons.edit_outlined),
+          ),
         ],
       ),
       body: SafeArea(

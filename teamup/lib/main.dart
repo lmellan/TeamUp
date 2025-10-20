@@ -18,6 +18,7 @@ import '/ui/explore_screen.dart';
 import '/ui/view_activity_screen.dart';
 import '/ui/edit_profile_screen.dart';
 import '/ui/create_activity_screen.dart';
+import 'auth_wrapper.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -66,7 +67,7 @@ class MyApp extends StatelessWidget {
       ],
 
       // Home y rutas
-      home: const WelcomeScreen(),
+      home: AuthWrapper(),
       routes: {
         '/login': (_) => const LoginScreen(),
         '/complete-perfil': (_) => const CompletePerfilScreen(),

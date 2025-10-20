@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:teamup/ui/login_screen.dart';
 import 'onboarding_activities_screen.dart';
 
 class WelcomeScreen extends StatelessWidget {
@@ -86,18 +87,40 @@ class WelcomeScreen extends StatelessWidget {
                 ),
               ),
 
-              // Botón “Comenzar”
+              // Botón "Comenzar"
               FilledButton(
                 onPressed: () {
                   Navigator.of(context).push(
                     MaterialPageRoute(
- 
                       builder: (_) => const OnboardingActivitiesScreen(),
                     ),
                   );
                 },
                 child: const Text(
                   'Comenzar',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 18,
+                  ),
+                ),
+              ),
+              
+              const SizedBox(height: 12), // Espacio entre botones
+              
+              //botón "Iniciar Sesión"
+              FilledButton(
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const LoginScreen(),
+                    ),
+                  );
+                },
+                style: FilledButton.styleFrom(
+                  backgroundColor: const Color(0xFFBDBDBD),
+                ),
+                child: const Text(
+                  'Iniciar Sesión',
                   style: TextStyle(
                     fontWeight: FontWeight.w800,
                     fontSize: 18,

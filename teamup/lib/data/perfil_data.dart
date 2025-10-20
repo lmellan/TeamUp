@@ -86,4 +86,16 @@ class ProfileServiceSupabase implements ProfileService {
         .map<Profile>((e) => _fromRow(Map<String, dynamic>.from(e)))
         .toList();
   }
+  
+@override
+  Future<void> signOut() async {
+    try {
+      await _c.auth.signOut();
+
+    } on AuthException catch (e) {
+      throw Exception(e.message.isNotEmpty ? e.message : 'Error al cerrar sesión');
+    } catch (e) {
+      throw Exception('Error inesperado: $e');
+    }
+  }
 }
