@@ -453,7 +453,10 @@ class _ExploreScreenState extends State<ExploreScreen> {
       context: context,
       showDragHandle: true,
       useSafeArea: true,
-      isScrollControlled: true,
+      isScrollControlled: true, 
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.of(context).size.height * 0.85, //c limita altura al 85%
+      ),
       builder: (ctx) {
         final t = Theme.of(ctx).textTheme;
         final cs = Theme.of(ctx).colorScheme;
@@ -479,7 +482,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
                 _comunas = [];
               });
               if (r != null) {
-                await _fetchComunas(r.id); // 👈 int
+                await _fetchComunas(r.id); // int
                 setModalState(() {}); // refresca lista
               }
             }
@@ -540,12 +543,13 @@ class _ExploreScreenState extends State<ExploreScreen> {
                       padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
                       child: DropdownButtonFormField<RegionCL>(
                         value: tempRegion,
+                        isExpanded: true, //aki se evita overflow del icono
                         decoration: InputDecoration(
                           labelText: 'Región',
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(16),
                           ),
-                          isDense: true,
+                          isDense: true, // <- reduce alturas y ayuda al layout
                         ),
                         items: _regiones
                             .map((r) => DropdownMenuItem(
@@ -581,9 +585,10 @@ class _ExploreScreenState extends State<ExploreScreen> {
                       child: seleccionarTodasTile(),
                     ),
 
-                    // Lista de comunas (multi-selección)
+                    // Lista de comunas con Expanded para que sea scrolleable
                     Expanded(
                       child: ListView.separated(
+                        shrinkWrap: true, // Añade esto
                         padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
                         itemCount: tempRegion == null ? 0 : comunasFiltradas.length,
                         separatorBuilder: (_, __) => const Divider(height: 1),
