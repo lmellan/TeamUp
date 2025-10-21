@@ -188,35 +188,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
                         ),
                         const SizedBox(height: 8),
 
-                        // Términos
-                        Row(
-                          children: [
-                            Checkbox(
-                              value: _acceptedTerms,
-                              onChanged: (v) => setState(() => _acceptedTerms = v ?? false),
-                            ),
-                            Expanded(
-                              child: Text.rich(
-                                TextSpan(
-                                  text: 'Acepto los ',
-                                  children: [
-                                    TextSpan(
-                                      text: 'Términos y Condiciones',
-                                      style: TextStyle(color: cs.primary),
-                                    ),
-                                    const TextSpan(text: ' y la '),
-                                    TextSpan(
-                                      text: 'Política de privacidad',
-                                      style: TextStyle(color: cs.primary),
-                                    ),
-                                  ],
-                                ),
-                                style: t.bodySmall?.copyWith(color: onSurfaceVariant),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
+ 
 
                         if (_error != null) ...[
                           Text(_error!, style: TextStyle(color: cs.error)),

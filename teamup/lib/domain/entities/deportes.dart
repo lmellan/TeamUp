@@ -1,3 +1,4 @@
+// sport.dart
 import 'field_spec.dart';
 
 class Sport {
@@ -9,6 +10,9 @@ class Sport {
   final DateTime? createdAt;
   final String? groupType;     // sport_group_type
   final String? environment;   // sport_environment
+
+  /// Ruta almacenada en BD (ej: "futbol.jpg" o "deportes/futbol.jpg")
+  final String? imagePath;
 
   /// jsonb crudo de la BD
   final Map<String, dynamic>? fieldsConfig;
@@ -23,6 +27,7 @@ class Sport {
     this.createdAt,
     this.groupType,
     this.environment,
+    this.imagePath,
     this.fieldsConfig,
     List<FieldSpec>? fields,
   }) : fields = fields ??
@@ -50,6 +55,7 @@ class Sport {
           : null,
       groupType: m['group_type'] as String?,
       environment: m['environment'] as String?,
+      imagePath: (m['image_path'] as String?)?.trim(),
       fieldsConfig: normalized,
     );
   }
@@ -61,6 +67,7 @@ class Sport {
         if (createdAt != null) 'created_at': createdAt!.toIso8601String(),
         if (groupType != null) 'group_type': groupType,
         if (environment != null) 'environment': environment,
+        if (imagePath != null) 'image_path': imagePath,
         if (fieldsConfig != null) 'fields_config': fieldsConfig,
       };
 }

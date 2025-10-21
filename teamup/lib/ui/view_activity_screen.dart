@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:supabase_flutter/supabase_flutter.dart'; // 👈 para getPublicUrl
 import '../componentes/map_preview.dart';
 
 import '../domain/entities/actividad.dart';
@@ -63,6 +64,23 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
 
   bool _loading = true;
   bool _busy = false;
+
+  // ===== Helpers de imágenes (deporte) =====
+  String? _sportPublicUrl(Sport? s) {
+    if (s == null) return null;
+    final path = s.imagePath?.trim();
+    if (path == null || path.isEmpty) return null;
+
+    // Acepta "deportes/futbol.jpg" o "futbol.jpg"
+    final clean = path.startsWith('deportes/')
+        ? path.replaceFirst('deportes/', '')
+        : path;
+
+    return Supabase.instance.client
+        .storage
+        .from('deportes')
+        .getPublicUrl(clean);
+  }
 
   @override
   void initState() {
@@ -162,35 +180,35 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
   }
 
   Future<void> _confirmDelete() async {
-  if (_a == null) return;
-  final theme = Theme.of(context);
-  final ok = await showDialog<bool>(
-    context: context,
-    builder: (_) => AlertDialog(
-      title: const Text('Eliminar actividad'),
-      content: const Text(
-        '¿Seguro que deseas eliminar esta actividad? Esta acción no se puede deshacer.'
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context, false),
-          child: const Text('Cancelar'),
+    if (_a == null) return;
+    final theme = Theme.of(context);
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Eliminar actividad'),
+        content: const Text(
+          '¿Seguro que deseas eliminar esta actividad? Esta acción no se puede deshacer.'
         ),
-        FilledButton(
-          style: FilledButton.styleFrom(
-            backgroundColor: theme.colorScheme.error,
-            foregroundColor: theme.colorScheme.onError,
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancelar'),
           ),
-          onPressed: () => Navigator.pop(context, true),
-          child: const Text('Eliminar'),
-        ),
-      ],
-    ),
-  );
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: theme.colorScheme.error,
+              foregroundColor: theme.colorScheme.onError,
+            ),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Eliminar'),
+          ),
+        ],
+      ),
+    );
 
-  if (ok != true) return;
+    if (ok != true) return;
 
-  setState(() => _busy = true);
+    setState(() => _busy = true);
     try {
       await widget.activitySvc.delete(widget.activityId);
       if (mounted) {
@@ -212,7 +230,6 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
 
   void _goToEdit() {
     if (_a == null) return;
-    // Ajusta esta ruta/arguments a tu configuración de navegación.
     Navigator.of(context).pushNamed(
       '/activity/edit',
       arguments: {'activityId': _a!.id},
@@ -249,6 +266,9 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
 
     final showJoin = !_iAmOwner;
 
+    // 👇 URL pública de imagen del deporte (si existe)
+    final sportImg = _sportPublicUrl(s);
+
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, result) {
@@ -268,18 +288,30 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
           onRefresh: _load,
           child: ListView(
             children: [
-              Container(
-                height: 180,
-                color: cs.primary.withValues(alpha: 0.35),
-                alignment: Alignment.center,
-                child: Text(
-                  _s(s?.iconEmoji).isNotEmpty ? _s(s?.iconEmoji) : '🎯',
-                  style: TextStyle(
-                    fontSize: 48,
-                    color: cs.onPrimaryContainer,
-                  ),
-                ),
+              // ===== Cabecera con imagen del deporte o emoji =====
+              SizedBox(
+                height: 200,
+                child: (sportImg != null && sportImg.isNotEmpty)
+                    ? ClipRRect(
+                        borderRadius: const BorderRadius.only(
+                          bottomLeft: Radius.circular(16),
+                          bottomRight: Radius.circular(16),
+                        ),
+                        child: Image.network(
+                          sportImg,
+                          width: double.infinity,
+                          height: 200,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => _EmojiHeader(
+                            emoji: _s(s?.iconEmoji).isNotEmpty ? _s(s?.iconEmoji) : '🎯',
+                          ),
+                        ),
+                      )
+                    : _EmojiHeader(
+                        emoji: _s(s?.iconEmoji).isNotEmpty ? _s(s?.iconEmoji) : '🎯',
+                      ),
               ),
+
               Padding(
                 padding: const EdgeInsets.all(16),
                 child: Column(
@@ -329,13 +361,13 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
                     if (fields.isNotEmpty) ...[
                       Theme(
                         data: Theme.of(context).copyWith(
-                          dividerColor: Colors.transparent, // opcional, elimina línea gris
+                          dividerColor: Colors.transparent,
                           listTileTheme: ListTileThemeData(
                             dense: true,
                             minLeadingWidth: 0, 
                             iconColor: Theme.of(context).brightness == Brightness.dark
                                 ? Colors.white70
-                                : const Color(0xFF6B7280), // igual que muted
+                                : const Color(0xFF6B7280),
                             textColor: Theme.of(context).colorScheme.onSurface,
                           ),
                         ),
@@ -356,7 +388,7 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
                                 ?.copyWith(color: Theme.of(context).colorScheme.onSurface),
                           ),
                           children: [
-                            _FieldsList(fields: fields, sportCode: s?.name),
+                            _FieldsList(fields: fields, sportCode: _s(s?.name)),
                           ],
                         ),
                       ),
@@ -471,6 +503,34 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
   }
 }
 
+class _EmojiHeader extends StatelessWidget {
+  final String emoji;
+  const _EmojiHeader({required this.emoji});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Container(
+      height: 200,
+      width: double.infinity,
+      alignment: Alignment.center,
+      decoration: const BoxDecoration(
+        borderRadius: BorderRadius.only(
+          bottomLeft: Radius.circular(16),
+          bottomRight: Radius.circular(16),
+        ),
+      ),
+      child: Text(
+        emoji,
+        style: TextStyle(
+          fontSize: 48,
+          color: cs.onPrimaryContainer,
+        ),
+      ),
+    );
+  }
+}
+
 class _IconRow extends StatelessWidget {
   final IconData icon;
   final String text;
@@ -502,7 +562,6 @@ class _FieldsList extends StatelessWidget {
   const _FieldsList({required this.fields, this.sportCode});
 
   String _labelize(String raw) {
-    // convierte snake_case o camelCase a "Título Bonito"
     final r = raw.replaceAll('_', ' ');
     final withSpaces = RegExp(r'(?<=[a-z])([A-Z])').hasMatch(r)
         ? r.replaceAllMapped(RegExp(r'(?<=[a-z])([A-Z])'), (m) => ' ${m.group(1)}')
@@ -537,4 +596,3 @@ class _FieldsList extends StatelessWidget {
     );
   }
 }
-

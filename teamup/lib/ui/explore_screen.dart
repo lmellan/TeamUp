@@ -1,16 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
- 
+import 'package:supabase_flutter/supabase_flutter.dart';
+
 import '../domain/entities/actividad.dart';
 import '../domain/entities/deportes.dart';
 import '../domain/services/actividad_services.dart';
 import '../domain/services/deportes_services.dart';
- 
+
 import '../data/actividad_data.dart';
 import '../data/deportes_data.dart';
 
+// 👇 Catálogos de regiones/comunas (ids int)
+import '../domain/entities/localidades/region.dart';
+import '../domain/entities/localidades/comuna.dart';
+import '../domain/services/localidades_service.dart';
+import '../data/localidad.dart';
+
 import '../componentes/navigate_bar.dart';
- 
+
 const _activeStatuses = ['activa', 'en_curso'];
 
 enum _DateFilter { hoy, semana, mes, ano, todo }
@@ -32,7 +39,7 @@ class ExploreScreen extends StatefulWidget {
     ActivityService? actividades,
     SportService? deportes,
   })  : actividades = actividades ?? ActivityServiceSupabase(),
-        deportes    = deportes    ?? SportServiceSupabase();
+        deportes = deportes ?? SportServiceSupabase();
 
   @override
   State<ExploreScreen> createState() => _ExploreScreenState();
@@ -41,16 +48,41 @@ class ExploreScreen extends StatefulWidget {
 class _ExploreScreenState extends State<ExploreScreen> {
   bool _loading = false;
 
- 
   final Set<String> _selectedSportIds = {'ALL'};
   _DateFilter _selectedDateFilter = _DateFilter.semana;
+
+  // ======== Región/Comuna (id int) ========
+  final CatalogoLocalidadesService _locSvc = CatalogoLocalidadesSupabase();
+  List<RegionCL> _regiones = [];
+  List<ComunaCL> _comunas = [];
+  RegionCL? _selectedRegion;
+
+  // 👉 ahora soporta múltiples comunas y “todas las comunas”
+  final Set<int> _selectedComunaIds = <int>{};
+  bool _todasComunasDeRegion = false;
+  String _comunaQuery = '';
 
   List<Activity> _activities = [];
   List<Sport> _sports = [];
   final Map<String, Sport> _sportById = {};
- 
 
   String _trimOrEmpty(String? s) => (s ?? '').trim();
+
+  // ========= Helpers imágenes (solo para cards) =========
+  String? _sportPublicUrl(Sport? s) {
+    if (s == null) return null;
+    final path = s.imagePath?.trim();
+    if (path == null || path.isEmpty) return null;
+    final clean = path.startsWith('deportes/')
+        ? path.replaceFirst('deportes/', '')
+        : path;
+    return Supabase.instance.client.storage.from('deportes').getPublicUrl(clean);
+  }
+
+  String? _previewUrlFor(Activity a) {
+    final sport = _sportById[a.sportId];
+    return _sportPublicUrl(sport);
+  }
 
   @override
   void initState() {
@@ -59,7 +91,11 @@ class _ExploreScreenState extends State<ExploreScreen> {
   }
 
   Future<void> _bootstrap() async {
-    await Future.wait([_fetchSports(), _fetchActivities()]);
+    await Future.wait([
+      _fetchSports(),
+      _fetchRegiones(),
+      _fetchActivities(),
+    ]);
   }
 
   Future<void> _fetchSports() async {
@@ -74,23 +110,91 @@ class _ExploreScreenState extends State<ExploreScreen> {
     }
   }
 
+  Future<void> _fetchRegiones() async {
+    try {
+      _regiones = await _locSvc.listarRegiones();
+      if (mounted) setState(() {});
+    } catch (e) {
+      debugPrint('Error cargando regiones: $e');
+    }
+  }
+
+  Future<void> _fetchComunas(int regionId) async {
+    try {
+      _comunas = await _locSvc.listarComunasPorRegion(regionId);
+      if (mounted) setState(() {});
+    } catch (e) {
+      debugPrint('Error cargando comunas: $e');
+    }
+  }
+
   (DateTime? startUtc, DateTime? endUtc) _dateRangeForFilter(_DateFilter f) {
     final now = DateTime.now();
     final startLocal = DateTime(now.year, now.month, now.day);
     DateTime? start, end;
     switch (f) {
       case _DateFilter.hoy:
-        start = startLocal; end = startLocal.add(const Duration(days: 1)); break;
+        start = startLocal;
+        end = startLocal.add(const Duration(days: 1));
+        break;
       case _DateFilter.semana:
-        start = startLocal; end = startLocal.add(const Duration(days: 7)); break;
+        start = startLocal;
+        end = startLocal.add(const Duration(days: 7));
+        break;
       case _DateFilter.mes:
-        start = startLocal; end = startLocal.add(const Duration(days: 30)); break;
+        start = startLocal;
+        end = startLocal.add(const Duration(days: 30));
+        break;
       case _DateFilter.ano:
-        start = startLocal; end = startLocal.add(const Duration(days: 365)); break;
+        start = startLocal;
+        end = startLocal.add(const Duration(days: 365));
+        break;
       case _DateFilter.todo:
         return (null, null);
     }
     return (start.toUtc(), end.toUtc());
+  }
+
+  // ======== Coincidencia por texto en dirección/lugar (región/comuna múltiple) ========
+  bool _matchesRegionComuna(Activity a) {
+    final direccion = _trimOrEmpty(a.formattedAddress ?? a.placeName);
+    if (direccion.isEmpty) return false;
+    final p = direccion.toLowerCase();
+
+    final hayRegion = _selectedRegion != null;
+    final hayComunas = _selectedComunaIds.isNotEmpty;
+    final usarTodas = _todasComunasDeRegion && hayRegion;
+
+    // Si no hay filtros de lugar, pasa.
+    if (!hayRegion && !hayComunas) return true;
+
+    // Verificar región
+    final regionOk = !hayRegion
+        ? true
+        : p.contains(_selectedRegion!.nombre.toLowerCase());
+
+    // Si están “todas las comunas” activas, basta con que coincida la región
+    if (usarTodas) return regionOk;
+
+    // Si hay comunas específicas seleccionadas
+    if (hayComunas) {
+      final nombresSeleccionadas = _comunas
+          .where((c) => _selectedComunaIds.contains(c.id))
+          .map((c) => c.nombre.toLowerCase())
+          .toList();
+
+      final algunaComunaOk =
+          nombresSeleccionadas.any((n) => p.contains(n));
+
+      if (hayRegion) {
+        return regionOk && algunaComunaOk;
+      } else {
+        return algunaComunaOk;
+      }
+    }
+
+    // Solo región
+    return regionOk;
   }
 
   Future<void> _fetchActivities() async {
@@ -102,13 +206,15 @@ class _ExploreScreenState extends State<ExploreScreen> {
       final deportesFiltro =
           (selected.isEmpty || selected.contains('ALL')) ? null : selected.toList();
 
-      _activities = await widget.actividades.list(
+      final base = await widget.actividades.list(
         startUtc: startUtc,
         endUtc: endUtc,
         estados: _activeStatuses,
         sportIds: deportesFiltro,
-        limit: 200,
+        limit: 400,
       );
+
+      _activities = base.where(_matchesRegionComuna).toList();
     } catch (e) {
       debugPrint('Error cargando actividades: $e');
       if (mounted) {
@@ -121,6 +227,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
     }
   }
 
+  // ============== Filtro por deportes (emoji consistente, mismo “círculo”) ==============
   Future<void> _openSportSheet() async {
     await showModalBottomSheet<void>(
       context: context,
@@ -154,19 +261,24 @@ class _ExploreScreenState extends State<ExploreScreen> {
               });
             }
 
-            Widget circleTile({
+            Widget pillTile({
               required bool selected,
               required Widget title,
-              Widget? leading,
+              required String emoji,
               VoidCallback? onTap,
             }) {
               return ListTile(
-                leading: leading,
+                leading: CircleAvatar(
+                  radius: 14,
+                  backgroundColor: cs.primary.withOpacity(0.15),
+                  child: Text(
+                    emoji.isEmpty ? '🎯' : emoji,
+                    style: const TextStyle(fontSize: 16),
+                  ),
+                ),
                 title: title,
                 trailing: Icon(
-                  selected
-                      ? Icons.radio_button_checked
-                      : Icons.radio_button_unchecked,
+                  selected ? Icons.radio_button_checked : Icons.radio_button_unchecked,
                   color: selected ? cs.primary : null,
                 ),
                 onTap: onTap,
@@ -191,14 +303,13 @@ class _ExploreScreenState extends State<ExploreScreen> {
                     ),
                   ),
                   const Divider(height: 1),
-
-                  circleTile(
+                  pillTile(
                     selected: tempSelected.contains('ALL'),
                     title: const Text('Todos'),
+                    emoji: '🎯',
                     onTap: toggleAll,
                   ),
                   const Divider(height: 1),
-
                   Expanded(
                     child: ListView.separated(
                       itemCount: _sports.length,
@@ -206,25 +317,18 @@ class _ExploreScreenState extends State<ExploreScreen> {
                       itemBuilder: (_, i) {
                         final s = _sports[i];
                         final id = s.id;
-                        final emoji = _trimOrEmpty(s.iconEmoji);
-                        final name = s.name;
                         final selected = tempSelected.contains(id);
+                        final emoji = _trimOrEmpty(s.iconEmoji);
 
-                        return circleTile(
+                        return pillTile(
                           selected: selected,
                           onTap: () => toggleOne(id),
-                          leading: CircleAvatar(
-                            radius: 14,
-                            backgroundColor: cs.primary.withOpacity(0.15),
-                            child: Text(emoji.isEmpty ? '🎯' : emoji,
-                                style: const TextStyle(fontSize: 16)),
-                          ),
-                          title: Text(name),
+                          emoji: emoji,
+                          title: Text(s.name),
                         );
                       },
                     ),
                   ),
-
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
                     child: Row(
@@ -262,6 +366,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
     );
   }
 
+  // ============== Filtro de fecha ==============
   Future<void> _openDateFilterSheet() async {
     await showModalBottomSheet<void>(
       context: context,
@@ -342,31 +447,270 @@ class _ExploreScreenState extends State<ExploreScreen> {
     );
   }
 
-  void _notReady(String what) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('$what: próximamente')),
+  // ============== Bottom sheet de LUGAR (Región/Comuna múltiple + “todas”) ==============
+  Future<void> _openLugarSheet() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      useSafeArea: true,
+      isScrollControlled: true,
+      builder: (ctx) {
+        final t = Theme.of(ctx).textTheme;
+        final cs = Theme.of(ctx).colorScheme;
+
+        RegionCL? tempRegion = _selectedRegion;
+        final Set<int> tempComunaIds = Set<int>.from(_selectedComunaIds);
+        bool tempTodas = _todasComunasDeRegion;
+        String tempQuery = _comunaQuery;
+
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            final comunasFiltradas = _comunas.where((c) {
+              if (tempQuery.trim().isEmpty) return true;
+              return c.nombre.toLowerCase().contains(tempQuery.toLowerCase());
+            }).toList();
+
+            Future<void> onRegionChanged(RegionCL? r) async {
+              setModalState(() {
+                tempRegion = r;
+                tempComunaIds.clear();
+                tempTodas = false;
+                tempQuery = '';
+                _comunas = [];
+              });
+              if (r != null) {
+                await _fetchComunas(r.id); // 👈 int
+                setModalState(() {}); // refresca lista
+              }
+            }
+
+            Widget seleccionarTodasTile() {
+              if (tempRegion == null) return const SizedBox.shrink();
+              return ListTile(
+                leading: CircleAvatar(
+                  radius: 14,
+                  backgroundColor: cs.primary.withOpacity(0.12),
+                  child: const Icon(Icons.select_all, size: 16),
+                ),
+                title: Text('Seleccionar todas las comunas de ${tempRegion!.nombre}'),
+                trailing: Icon(
+                  tempTodas ? Icons.radio_button_checked : Icons.radio_button_unchecked,
+                  color: tempTodas ? cs.primary : null,
+                ),
+                onTap: () {
+                  setModalState(() {
+                    tempTodas = !tempTodas;
+                    if (tempTodas) {
+                      tempComunaIds.clear();
+                    }
+                  });
+                },
+              );
+            }
+
+            return SafeArea(
+              child: Padding(
+                padding: EdgeInsets.only(
+                  bottom: MediaQuery.of(ctx).viewInsets.bottom,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    ListTile(
+                      title: Text('Filtrar por lugar', style: t.titleMedium),
+                      subtitle: const Text('Selecciona Región y comunas (opcional)'),
+                      trailing: TextButton(
+                        onPressed: () {
+                          setState(() {
+                            _selectedRegion = null;
+                            _selectedComunaIds.clear();
+                            _todasComunasDeRegion = false;
+                            _comunaQuery = '';
+                          });
+                          Navigator.pop(ctx);
+                          _fetchActivities();
+                        },
+                        child: const Text('Limpiar'),
+                      ),
+                    ),
+                    const Divider(height: 1),
+
+                    // Región (diseño uniforme: borde redondo y denso)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                      child: DropdownButtonFormField<RegionCL>(
+                        value: tempRegion,
+                        decoration: InputDecoration(
+                          labelText: 'Región',
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          isDense: true,
+                        ),
+                        items: _regiones
+                            .map((r) => DropdownMenuItem(
+                                  value: r,
+                                  child: Text(r.nombre),
+                                ))
+                            .toList(),
+                        onChanged: (r) => onRegionChanged(r),
+                      ),
+                    ),
+
+                    // Buscador de comuna
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                      child: TextField(
+                        enabled: tempRegion != null,
+                        decoration: InputDecoration(
+                          labelText: 'Buscar comuna',
+                          hintText: 'Escribe para filtrar…',
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          isDense: true,
+                          prefixIcon: const Icon(Icons.search),
+                        ),
+                        onChanged: (v) => setModalState(() => tempQuery = v),
+                      ),
+                    ),
+
+                    // Seleccionar todas
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      child: seleccionarTodasTile(),
+                    ),
+
+                    // Lista de comunas (multi-selección)
+                    Expanded(
+                      child: ListView.separated(
+                        padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+                        itemCount: tempRegion == null ? 0 : comunasFiltradas.length,
+                        separatorBuilder: (_, __) => const Divider(height: 1),
+                        itemBuilder: (_, i) {
+                          final c = comunasFiltradas[i];
+                          final selected = tempComunaIds.contains(c.id);
+
+                          return ListTile(
+                            enabled: tempRegion != null,
+                            leading: CircleAvatar(
+                              radius: 14,
+                              backgroundColor: Theme.of(context)
+                                  .colorScheme
+                                  .primary
+                                  .withOpacity(0.12),
+                              child: const Icon(Icons.location_on_outlined, size: 16),
+                            ),
+                            title: Text(c.nombre),
+                            trailing: Icon(
+                              // círculo consistente
+                              selected
+                                  ? Icons.check_circle
+                                  : Icons.circle_outlined,
+                              color: selected
+                                  ? Theme.of(context).colorScheme.primary
+                                  : null,
+                            ),
+                            onTap: () {
+                              setModalState(() {
+                                if (selected) {
+                                  tempComunaIds.remove(c.id);
+                                } else {
+                                  tempComunaIds.add(c.id);
+                                }
+                                // si selecciono alguna, desactivo "todas"
+                                if (tempComunaIds.isNotEmpty) {
+                                  tempTodas = false;
+                                }
+                              });
+                            },
+                          );
+                        },
+                      ),
+                    ),
+
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: () => Navigator.pop(ctx),
+                              child: const Text('Cancelar'),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: FilledButton(
+                              onPressed: () {
+                                setState(() {
+                                  _selectedRegion = tempRegion;
+                                  _selectedComunaIds
+                                    ..clear()
+                                    ..addAll(tempComunaIds);
+                                  _todasComunasDeRegion = tempTodas;
+                                  _comunaQuery = tempQuery;
+                                });
+                                Navigator.pop(ctx);
+                                _fetchActivities();
+                              },
+                              child: const Text('Aplicar'),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
     );
   }
 
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context).textTheme;
- 
+
     final muted = Theme.of(context).brightness == Brightness.dark
         ? Colors.white70
         : const Color(0xFF6B7280);
 
     final isAllSports = _selectedSportIds.contains('ALL');
-    final sportsLabel = isAllSports
-        ? 'Deportes: Todos'
-        : 'Deportes (${_selectedSportIds.length})';
+    final sportsLabel =
+        isAllSports ? 'Deportes: Todos' : 'Deportes (${_selectedSportIds.length})';
     final dateLabel = 'Fecha: ${_dateFilterLabel[_selectedDateFilter]}';
 
+    // Label Lugar
+    String lugarLabel;
+    if (_selectedRegion == null && _selectedComunaIds.isEmpty) {
+      lugarLabel = 'Lugar: Todos';
+    } else if (_selectedRegion != null && _todasComunasDeRegion) {
+      lugarLabel = 'Lugar: Todas las comunas, ${_selectedRegion!.nombre}';
+    } else if (_selectedRegion != null && _selectedComunaIds.isNotEmpty) {
+      final n = _selectedComunaIds.length;
+      lugarLabel = 'Lugar: $n comuna${n == 1 ? '' : 's'}, ${_selectedRegion!.nombre}';
+    } else if (_selectedRegion != null) {
+      lugarLabel = 'Lugar: ${_selectedRegion!.nombre}';
+    } else {
+      lugarLabel = 'Lugar: ${_selectedComunaIds.length} comunas';
+    }
+
     return Scaffold(
-      appBar: AppBar(title: const Text('Explorar'), centerTitle: true),
+      appBar: AppBar(
+        automaticallyImplyLeading: false, // Oculta la flecha de retroceso
+        
+        title: const Text('Explorar'), 
+        centerTitle: true),
       body: RefreshIndicator(
         onRefresh: () async {
           await _fetchSports();
+          await _fetchRegiones();
+          if (_selectedRegion != null) {
+            await _fetchComunas(_selectedRegion!.id);
+          }
           await _fetchActivities();
         },
         child: CustomScrollView(
@@ -392,9 +736,9 @@ class _ExploreScreenState extends State<ExploreScreen> {
                       ),
                       const SizedBox(width: 8),
                       _FilterPill(
-                        label: 'Lugar',
+                        label: lugarLabel,
                         icon: Icons.place_outlined,
-                        onTap: () => _notReady('Filtro por lugar'),
+                        onTap: _openLugarSheet,
                       ),
                     ],
                   ),
@@ -424,7 +768,8 @@ class _ExploreScreenState extends State<ExploreScreen> {
             else if (_activities.isEmpty)
               SliverToBoxAdapter(
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
                   child: Text(
                     'No hay actividades activas con estos filtros.',
                     style: t.bodyMedium?.copyWith(color: muted),
@@ -439,18 +784,20 @@ class _ExploreScreenState extends State<ExploreScreen> {
                   final a = _activities[i];
 
                   final sport = _sportById[a.sportId];
+                  final emoji = _trimOrEmpty(sport?.iconEmoji);
                   final sportLabel = sport == null
                       ? 'Actividad'
-                      : '${_trimOrEmpty(sport.iconEmoji).isEmpty ? '🎯' : _trimOrEmpty(sport.iconEmoji)} ${sport.name}';
+                      : '${emoji.isEmpty ? '🎯' : emoji} ${sport.name}';
 
                   final rawTitle = _trimOrEmpty(a.title);
                   final desc = _trimOrEmpty(a.description);
-                  final title = rawTitle.isNotEmpty
-                      ? rawTitle
-                      : (desc.isEmpty ? 'Sin título' : desc);
+                  final title =
+                      rawTitle.isNotEmpty ? rawTitle : (desc.isEmpty ? 'Sin título' : desc);
 
                   final place = _trimOrEmpty(a.placeName ?? a.formattedAddress);
                   final dt = a.date.toLocal();
+
+                  final previewUrl = _previewUrlFor(a);
 
                   return Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -459,11 +806,12 @@ class _ExploreScreenState extends State<ExploreScreen> {
                       title: title,
                       datetime: DateFormat('dd/MM/yyyy, h:mm a').format(dt),
                       place: place.isEmpty ? null : place,
+                      imageUrl: previewUrl,
                       onTap: () {
                         Navigator.pushNamed(
                           context,
                           '/detail-activity',
-                          arguments: a.id, // 👈 pasamos el id
+                          arguments: a.id,
                         );
                       },
                     ),
@@ -474,7 +822,6 @@ class _ExploreScreenState extends State<ExploreScreen> {
           ],
         ),
       ),
-
       bottomNavigationBar: TeamUpBottomNav(
         currentIndex: 0,
         onTap: (i) => teamUpNavigate(context, i),
@@ -506,8 +853,8 @@ class _FilterPill extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         decoration: BoxDecoration(
           color: Theme.of(context).brightness == Brightness.dark
-              ? cs.primary.withValues(alpha: 0.15)
-              : cs.primaryContainer.withValues(alpha: 0.8),
+              ? cs.primary.withOpacity(0.15)
+              : cs.primaryContainer.withOpacity(0.8),
           borderRadius: BorderRadius.circular(999),
         ),
         child: Row(
@@ -537,14 +884,16 @@ class _FilterPill extends StatelessWidget {
 class _ExploreCard extends StatelessWidget {
   final String category, title, datetime;
   final String? place;
-  final VoidCallback? onTap; // 👈 nuevo
+  final String? imageUrl;
+  final VoidCallback? onTap;
 
   const _ExploreCard({
     required this.category,
     required this.title,
     required this.datetime,
     this.place,
-    this.onTap, // 👈 nuevo
+    this.imageUrl,
+    this.onTap,
   });
 
   @override
@@ -555,13 +904,46 @@ class _ExploreCard extends StatelessWidget {
         ? Colors.white70
         : const Color(0xFF6B7280);
 
-    // Usamos Material + InkWell para ripple y bordes redondeados
+    Widget previewBox() {
+      final radius = BorderRadius.circular(12);
+      if (imageUrl == null || imageUrl!.isEmpty) {
+        return Container(
+          width: 96,
+          height: 96,
+          decoration: BoxDecoration(
+            color: cs.primaryContainer.withOpacity(0.5),
+            borderRadius: radius,
+          ),
+          child: Icon(Icons.image, color: cs.onPrimaryContainer, size: 28),
+        );
+      }
+      return ClipRRect(
+        borderRadius: radius,
+        child: Image.network(
+          imageUrl!,
+          width: 96,
+          height: 96,
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => Container(
+            width: 96,
+            height: 96,
+            decoration: BoxDecoration(
+              color: cs.primaryContainer.withOpacity(0.5),
+              borderRadius: radius,
+            ),
+            child: Icon(Icons.broken_image_outlined,
+                color: cs.onPrimaryContainer, size: 28),
+          ),
+        ),
+      );
+    }
+
     return Material(
       color: Colors.transparent,
       borderRadius: BorderRadius.circular(16),
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
-        onTap: onTap, // 👈 navega cuando se toca
+        onTap: onTap,
         child: Container(
           decoration: BoxDecoration(
             color: Theme.of(context).brightness == Brightness.dark
@@ -576,7 +958,6 @@ class _ExploreCard extends StatelessWidget {
             boxShadow: [
               BoxShadow(
                 blurRadius: 10,
-                spreadRadius: 0,
                 offset: const Offset(0, 2),
                 color: Colors.black.withOpacity(
                   Theme.of(context).brightness == Brightness.dark ? 0.25 : 0.06,
@@ -587,15 +968,7 @@ class _ExploreCard extends StatelessWidget {
           padding: const EdgeInsets.all(12),
           child: Row(
             children: [
-              Container(
-                width: 96,
-                height: 96,
-                decoration: BoxDecoration(
-                  color: cs.primaryContainer.withOpacity(0.5),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(Icons.image, color: cs.onPrimaryContainer, size: 28),
-              ),
+              previewBox(),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -607,7 +980,8 @@ class _ExploreCard extends StatelessWidget {
                       title,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: t.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+                      style:
+                          t.titleMedium?.copyWith(fontWeight: FontWeight.w700),
                     ),
                     const SizedBox(height: 2),
                     Text(datetime, style: t.bodySmall?.copyWith(color: muted)),
@@ -622,6 +996,6 @@ class _ExploreCard extends StatelessWidget {
           ),
         ),
       ),
-    ); 
+    );
   }
 }

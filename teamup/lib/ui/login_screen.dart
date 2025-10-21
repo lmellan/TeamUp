@@ -1,5 +1,5 @@
- 
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../domain/services/auth_services.dart';
 import '../../data/auth_data.dart';
 
@@ -18,7 +18,6 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _loading = false;
   String? _error;
 
- 
   final AuthService _auth = AuthServiceSupabase();
 
   @override
@@ -30,49 +29,28 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<void> _signIn() async {
     if (!_formKey.currentState!.validate()) return;
-    setState(() { _loading = true; _error = null; });
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
 
     try {
       await _auth.signIn(
         email: _email.text.trim(),
         password: _password.text,
       );
-
- 
       await _auth.refreshSession();
 
       if (_auth.currentUserId() != null && mounted) {
         Navigator.pushReplacementNamed(context, '/perfil');
       } else {
-        setState(() => _error = 'No se pudo iniciar sesión. Intenta nuevamente.');
+        setState(() =>
+            _error = 'No se pudo iniciar sesión. Intenta nuevamente.');
       }
     } catch (e, st) {
       setState(() => _error = e.toString().replaceFirst('Exception: ', ''));
- 
+      // ignore: avoid_print
       print('Login error ⇒ $e\n$st');
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
-  }
-
-  Future<void> _resetPassword() async {
-    final email = _email.text.trim();
-    if (email.isEmpty) {
-      setState(() => _error = 'Ingresa tu correo para recuperar tu contraseña.');
-      return;
-    }
-    setState(() { _loading = true; _error = null; });
-    try {
-      await _auth.resetPassword(email);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Si el correo existe, te enviamos instrucciones.')),
-        );
-      }
-    } catch (e, st) {
-      setState(() => _error = e.toString().replaceFirst('Exception: ', ''));
-      
-      print('resetPassword error ⇒ $e\n$st');
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -86,6 +64,10 @@ class _LoginScreenState extends State<LoginScreen> {
         ? Colors.white.withOpacity(0.75)
         : const Color(0xFF757575);
 
+    // 🔗 URL pública del logo desde el bucket “logo”
+    final logoUrl =
+        Supabase.instance.client.storage.from('logo').getPublicUrl('logo.png');
+
     return Scaffold(
       body: SafeArea(
         child: Center(
@@ -96,22 +78,46 @@ class _LoginScreenState extends State<LoginScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
+                  // 👇 LOGO DE LA APP
+                  Container(
+                    width: 120,
+                    height: 120,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: cs.primary.withOpacity(0.1),
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: Image.network(
+                      logoUrl,
+                      fit: BoxFit.contain,
+                      errorBuilder: (_, __, ___) => Icon(
+                        Icons.image_not_supported_outlined,
+                        color: cs.primary,
+                        size: 64,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+
                   // Header
-                  Text('TeamUp',
+                  Text(
+                    'TeamUp',
                     style: t.headlineMedium?.copyWith(
                       fontWeight: FontWeight.w700,
                       color: cs.onSurface,
                     ),
                   ),
                   const SizedBox(height: 16),
-                  Text('Bienvenido de nuevo',
+                  Text(
+                    'Bienvenido de nuevo',
                     style: t.titleLarge?.copyWith(
                       fontWeight: FontWeight.w700,
                       color: cs.onSurface,
                     ),
                   ),
                   const SizedBox(height: 8),
-                  Text('Inicia sesión para continuar tu viaje',
+                  Text(
+                    'Inicia sesión para continuar tu viaje',
                     style: t.bodyMedium?.copyWith(color: onSurfaceVariant),
                     textAlign: TextAlign.center,
                   ),
@@ -147,21 +153,14 @@ class _LoginScreenState extends State<LoginScreen> {
                             border: OutlineInputBorder(),
                           ),
                           validator: (v) {
-                            if (v == null || v.isEmpty) return 'Ingresa tu contraseña';
-                            if (v.length < 6) return 'Debe tener al menos 6 caracteres';
+                            if (v == null || v.isEmpty) {
+                              return 'Ingresa tu contraseña';
+                            }
+                            if (v.length < 6) {
+                              return 'Debe tener al menos 6 caracteres';
+                            }
                             return null;
                           },
-                        ),
-                        const SizedBox(height: 8),
-
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.end,
-                          children: [
-                            TextButton(
-                              onPressed: _loading ? null : _resetPassword,
-                              child: const Text('¿Olvidaste tu contraseña?'),
-                            ),
-                          ],
                         ),
 
                         if (_error != null) ...[
@@ -169,7 +168,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           Text(_error!, style: TextStyle(color: cs.error)),
                         ],
 
-                        const SizedBox(height: 8),
+                        const SizedBox(height: 16),
 
                         SizedBox(
                           width: double.infinity,
@@ -187,53 +186,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
                   const SizedBox(height: 24),
 
-                  Row(
-                    children: [
-                      Expanded(child: Divider(color: Theme.of(context).dividerColor)),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                        child: Text('O continuar con',
-                          style: t.bodySmall?.copyWith(color: onSurfaceVariant),
-                        ),
-                      ),
-                      Expanded(child: Divider(color: Theme.of(context).dividerColor)),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      OutlinedButton(
-                        style: OutlinedButton.styleFrom(shape: const CircleBorder()),
-                        onPressed: () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Google OAuth próximamente')),
-                          );
-                        },
-                        child: const Padding(
-                          padding: EdgeInsets.all(8.0),
-                          child: Icon(Icons.g_mobiledata, size: 32),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      OutlinedButton(
-                        style: OutlinedButton.styleFrom(shape: const CircleBorder()),
-                        onPressed: () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Otro proveedor próximamente')),
-                          );
-                        },
-                        child: const Padding(
-                          padding: EdgeInsets.all(8.0),
-                          child: Icon(Icons.alternate_email, size: 28),
-                        ),
-                      ),
-                    ],
-                  ),
-
-                  const SizedBox(height: 24),
-
                   Text.rich(
                     TextSpan(
                       text: "¿No tienes una cuenta? ",
@@ -242,7 +194,8 @@ class _LoginScreenState extends State<LoginScreen> {
                         WidgetSpan(
                           alignment: PlaceholderAlignment.middle,
                           child: TextButton(
-                            onPressed: () => Navigator.of(context).pushNamed('/create-account'),
+                            onPressed: () => Navigator.of(context)
+                                .pushNamed('/create-account'),
                             child: const Text('Regístrate'),
                           ),
                         ),

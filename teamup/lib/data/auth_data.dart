@@ -65,7 +65,7 @@ class AuthServiceSupabase implements AuthService {
     try {
       await _c.auth.refreshSession();
     } catch (_) {
-      // silencioso; no todos los targets lo requieren
+       
     }
   }
 
