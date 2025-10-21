@@ -699,7 +699,11 @@ class _ExploreScreenState extends State<ExploreScreen> {
     }
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Explorar'), centerTitle: true),
+      appBar: AppBar(
+        automaticallyImplyLeading: false, // Oculta la flecha de retroceso
+        
+        title: const Text('Explorar'), 
+        centerTitle: true),
       body: RefreshIndicator(
         onRefresh: () async {
           await _fetchSports();

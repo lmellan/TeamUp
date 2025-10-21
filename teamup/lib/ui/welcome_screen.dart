@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'onboarding_activities_screen.dart';
 
 class WelcomeScreen extends StatelessWidget {
@@ -9,6 +10,11 @@ class WelcomeScreen extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     final t = Theme.of(context).textTheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
+
+ 
+    final logoUrl = Supabase.instance.client.storage
+        .from('logo')
+        .getPublicUrl('logo.png');
 
     return Scaffold(
       body: SafeArea(
@@ -22,10 +28,7 @@ class WelcomeScreen extends StatelessWidget {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    _Dot(
-                      active: true, // <-- esta pantalla es la primera
-                      color: cs.secondary,
-                    ),
+                    _Dot(active: true, color: cs.secondary),
                     const SizedBox(width: 8),
                     _Dot(
                       color: isDark
@@ -42,32 +45,38 @@ class WelcomeScreen extends StatelessWidget {
                 ),
               ),
 
+              // Contenido principal
               Expanded(
                 child: Center(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      // Avatar/círculo con icono
+                      // 👇 Logo de Supabase centrado
                       Container(
-                        width: 96,
-                        height: 96,
+                        width: 140,
+                        height: 140,
                         decoration: BoxDecoration(
-                          color: cs.primary.withOpacity(isDark ? 0.30 : 0.20),
                           shape: BoxShape.circle,
+                          color: cs.primary.withOpacity(isDark ? 0.15 : 0.10),
                         ),
-                        alignment: Alignment.center,
-                        child: Icon(
-                          Icons.check_circle,
-                          size: 48,
-                          color: cs.primary,
+                        clipBehavior: Clip.antiAlias,
+                        child: Image.network(
+                          logoUrl,
+                          fit: BoxFit.contain,
+                          errorBuilder: (_, __, ___) => Icon(
+                            Icons.image_not_supported_outlined,
+                            color: cs.primary,
+                            size: 64,
+                          ),
                         ),
                       ),
                       const SizedBox(height: 24),
                       Text(
                         'Bienvenido a TeamUp',
                         textAlign: TextAlign.center,
-                        style: t.headlineLarge
-                            ?.copyWith(fontWeight: FontWeight.w800),
+                        style: t.headlineLarge?.copyWith(
+                          fontWeight: FontWeight.w800,
+                        ),
                       ),
                       const SizedBox(height: 12),
                       ConstrainedBox(
@@ -91,7 +100,6 @@ class WelcomeScreen extends StatelessWidget {
                 onPressed: () {
                   Navigator.of(context).push(
                     MaterialPageRoute(
- 
                       builder: (_) => const OnboardingActivitiesScreen(),
                     ),
                   );

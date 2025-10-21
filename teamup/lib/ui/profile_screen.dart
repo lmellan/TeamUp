@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:supabase_flutter/supabase_flutter.dart'; // 👈 para getPublicUrl
+import 'package:supabase_flutter/supabase_flutter.dart';  
+ 
 
 import '../../domain/entities/perfil.dart';
 import '../../domain/entities/deportes.dart';
@@ -189,31 +190,74 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final avatarUrl = _trimOrEmpty(_profile?.avatarUrl);
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Perfil'),
-        centerTitle: true,
-        actions: [
-          IconButton(
-            tooltip: 'Editar perfil',
-            onPressed: () async {
-              final result = await Navigator.pushNamed(
-                context,
-                '/edit-profile',
-                arguments: _profile,
-              );
-              if (result == true) {
-                await _loadAll();
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Perfil actualizado')),
-                  );
-                }
+    appBar: AppBar(
+      automaticallyImplyLeading: false, // 👈 sin flecha de retroceso
+      title: const Text('Perfil'),
+      centerTitle: true,
+      leading: IconButton(
+        tooltip: 'Cerrar sesión',
+        icon: const Icon(Icons.logout),
+        onPressed: () async {
+          final confirmed = await showDialog<bool>(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              title: const Text('Cerrar sesión'),
+              content: const Text('¿Seguro que deseas cerrar tu sesión?'),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx, false),
+                  child: const Text('Cancelar'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.pop(ctx, true),
+                  child: const Text('Cerrar sesión'),
+                ),
+              ],
+            ),
+          );
+
+          if (confirmed == true) {
+            try {
+              await Supabase.instance.client.auth.signOut();
+              if (mounted) {
+                Navigator.of(context).pushNamedAndRemoveUntil(
+                  '/login',
+                  (route) => false,
+                );
               }
-            },
-            icon: const Icon(Icons.edit_outlined),
-          ),
-        ],
+            } catch (e) {
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Error al cerrar sesión: $e')),
+                );
+              }
+            }
+          }
+        },
       ),
+      actions: [
+        IconButton(
+          tooltip: 'Editar perfil',
+          onPressed: () async {
+            final result = await Navigator.pushNamed(
+              context,
+              '/edit-profile',
+              arguments: _profile,
+            );
+            if (result == true) {
+              await _loadAll();
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Perfil actualizado')),
+                );
+              }
+            }
+          },
+          icon: const Icon(Icons.edit_outlined),
+        ),
+      ],
+    ),
+
       body: SafeArea(
         child: RefreshIndicator(
           onRefresh: _loadAll,
