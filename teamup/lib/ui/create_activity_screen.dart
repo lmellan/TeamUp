@@ -224,16 +224,23 @@ class _CreateActivityScreenState extends State<CreateActivityScreen> {
     if (picked != null) setState(() => _date = picked);
   }
 
-  Future<void> _pickTime() async {
-    final picked = await showTimePicker(
-      context: context,
-      initialTime: _time ?? TimeOfDay.now(),
-      initialEntryMode: TimePickerEntryMode.input,
-    );
-    if (picked != null) {
-      setState(() => _time = picked);
-    }
-  }
+Future<void> _pickTime() async {
+  final picked = await showTimePicker(
+    context: context,
+    initialTime: _time ?? TimeOfDay.now(),
+    initialEntryMode: TimePickerEntryMode.input,
+    builder: (context, child) {
+      // Fuerza formato 24 h en el diálogo
+      final media = MediaQuery.of(context);
+      return MediaQuery(
+        data: media.copyWith(alwaysUse24HourFormat: true),
+        child: child!,
+      );
+    },
+  );
+  if (picked != null) setState(() => _time = picked);
+}
+
 
   Future<void> _openPlacePicker() async {
     final picked = await showPlacePicker(context);

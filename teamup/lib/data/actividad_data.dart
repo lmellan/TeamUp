@@ -6,7 +6,7 @@ import '../domain/services/actividad_services.dart';
 class ActivityServiceSupabase implements ActivityService {
   static const _tbl = 'actividades';
 
-  // columnas BD (según tu captura)
+  // columnas BD  
   static const _colId = 'id';
   static const _colSportId = 'sport_id';
   static const _colCreatorId = 'creator_id';
@@ -51,7 +51,7 @@ class ActivityServiceSupabase implements ActivityService {
       );
 
   Map<String, dynamic> _toRow(Activity a) => {
-        if (a.id != null) _colId: a.id, //
+        if (a.id != null) _colId: a.id, 
         _colSportId: a.sportId,
         _colCreatorId: a.creatorId,
         _colTitle: a.title,
@@ -128,7 +128,7 @@ class ActivityServiceSupabase implements ActivityService {
     return _fromRow(row);
   }
 
-  // (opcional) crear actividad si también la usas en otros lugares:
+  // crear actividad  
   Future<Activity> create(Activity a) async {
     final row = await Supabase.instance.client
         .from(_tbl)
@@ -142,23 +142,23 @@ class ActivityServiceSupabase implements ActivityService {
   
 
   @override
-  Future<Activity> delete(String id) async {
+  Future<Activity?> delete(String id) async {
     final row = await Supabase.instance.client
-        .from( _tbl)
+        .from(_tbl)
         .delete()
         .eq(_colId, id)
         .select()
         .maybeSingle();
-        
-    return _fromRow(row!);
+
+    return row == null ? null : _fromRow(row);
   }
 
   @override
   Future<Activity> update(String id, Activity updated) async {
-    // armamos el payload y evitamos sobreescribir columnas que no quieres tocar
+    // se arma el payload y se evita sobreescribir columnas que no quieres tocar
     final payload = _toRow(updated)
       ..remove(_colId)
-      ..remove(_colCreatorId) // normalmente no cambias el dueño
+      ..remove(_colCreatorId)  
       ..remove(_colCreatedAt);
 
     final row = await Supabase.instance.client
@@ -170,4 +170,60 @@ class ActivityServiceSupabase implements ActivityService {
 
     return _fromRow(row);
   }
+  @override
+  Future<List<Activity>> listByCoordinator(
+    String coordinatorId, {
+    bool ascending = true,
+    int limit = 200,
+    DateTime? startUtc,
+    DateTime? endUtc,
+    List<String>? estados,
+    List<String>? sportIds,
+  }) async {
+    final client = Supabase.instance.client;
+
+    var query = client.from(_tbl).select().eq(_colCreatorId, coordinatorId);
+
+    if (startUtc != null) {
+      query = query.gte(_colDate, startUtc.toIso8601String());
+    }
+    if (endUtc != null) {
+      query = query.lt(_colDate, endUtc.toIso8601String());
+    }
+    if (estados != null && estados.isNotEmpty) {
+      query = query.inFilter(_colStatus, estados);
+    }
+    if (sportIds != null && sportIds.isNotEmpty) {
+      query = query.inFilter(_colSportId, sportIds);
+    }
+
+    final rows = await query.order(_colDate, ascending: ascending).limit(limit);
+    return (rows as List).map((e) => _fromRow(e as Map<String, dynamic>)).toList();
+  }
+    @override
+  Future<List<Activity>> listByRegionComuna({
+    String? region,
+    String? comuna,
+    bool ascending = true,
+    int limit = 200,
+  }) async {
+    final client = Supabase.instance.client;
+    var query = client.from(_tbl).select();
+
+    // Aplica filtros de texto dinámicos
+    if (region != null && region.isNotEmpty) {
+      query = query.ilike(_colFormattedAddress, '%$region%');
+    }
+
+    if (comuna != null && comuna.isNotEmpty) {
+      query = query.ilike(_colFormattedAddress, '%$comuna%');
+    }
+
+    final rows = await query.order(_colDate, ascending: ascending).limit(limit);
+    return (rows as List)
+        .map((e) => _fromRow(e as Map<String, dynamic>))
+        .toList();
+  }
+
+
 }
