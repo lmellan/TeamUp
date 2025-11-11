@@ -1,3 +1,4 @@
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:intl/intl.dart';
@@ -20,8 +21,18 @@ import '/ui/edit_profile_screen.dart';
 import '/ui/create_activity_screen.dart';
 import 'auth_wrapper.dart';
 
+import 'package:firebase_core/firebase_core.dart';
+import 'firebase_options.dart';
+
+
 Future<void> main() async {
+
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Firebase
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
 
   // .env
   await dotenv.load(fileName: '.env');
@@ -40,9 +51,46 @@ Future<void> main() async {
   runApp(const MyApp());
 }
 
-class MyApp extends StatelessWidget {
+
+final supabase = Supabase.instance.client;
+
+class MyApp extends StatefulWidget {
   const MyApp({super.key});
 
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+@override
+  void initState() {
+    super.initState();
+    supabase.auth.onAuthStateChange.listen((event) async {
+      if ( event.event == AuthChangeEvent.signedIn ){
+        await FirebaseMessaging.instance.requestPermission();
+
+        await FirebaseMessaging.instance.getAPNSToken();
+        final fcmToken = await FirebaseMessaging.instance.getToken();
+        if ( fcmToken != null ) {
+          await _setFcmToken(fcmToken);
+        }
+      }
+    });
+    FirebaseMessaging.instance.onTokenRefresh.listen((fcmToken) async {
+      await _setFcmToken(fcmToken);
+    });
+    
+  }
+
+  Future<void> _setFcmToken(String fcmToken) async {
+    final userId = supabase.auth.currentUser!.id;
+    if(userId != null) {
+      await supabase.from('profile').upsert({
+        'id': userId,
+        'fcm_token': fcmToken,
+      });
+    }
+  }
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
