@@ -20,6 +20,9 @@ class Activity {
   final String? level;
   final Map<String, dynamic> fields;
 
+  final int? regionId;   // NUEVO
+  final int? comunaId;
+
   const Activity({
     this.id,
     required this.sportId,
@@ -38,5 +41,7 @@ class Activity {
     this.level,
     required this.fields,
     this.createdAt,
+    this.regionId,   // NUEVO
+    this.comunaId,
   });
 }

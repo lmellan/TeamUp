@@ -24,6 +24,9 @@ class ActivityServiceSupabase implements ActivityService {
   static const _colActivityLocation = 'activity_location';
   static const _colLevel = 'level';
   static const _colFields = 'fields';
+  static const _colRegionId = 'region_id';
+  static const _colComunaId = 'comuna_id';
+
 
   // ---------- Mappers ----------
   Activity _fromRow(Map<String, dynamic> m) => Activity(
@@ -48,6 +51,8 @@ class ActivityServiceSupabase implements ActivityService {
         fields: (m[_colFields] is Map)
             ? Map<String, dynamic>.from(m[_colFields] as Map)
             : <String, dynamic>{},
+        regionId: (m[_colRegionId] as num?)?.toInt(),   // NUEVO
+        comunaId: (m[_colComunaId] as num?)?.toInt(),
       );
 
   Map<String, dynamic> _toRow(Activity a) => {
@@ -67,10 +72,27 @@ class ActivityServiceSupabase implements ActivityService {
         _colActivityLocation: a.activityLocation,
         _colLevel: a.level,
         _colFields: a.fields,
+        _colRegionId: a.regionId,   // NUEVO
+        _colComunaId: a.comunaId,
         // _colCreatedAt lo setea la DB
       };
 
   // ---------- Implementación de la interfaz ----------
+
+  Future<void> _notifyNewActivity(String activityId) async {
+    try {
+      await Supabase.instance.client.functions.invoke(
+        'notify-new-activity',
+        body: {
+          'activity_id': activityId,
+        },
+      );
+    } catch (e) {
+      // No rompemos la creación si falla la notificación.
+      // Puedes loguear si quieres:
+      // debugPrint('Error al enviar notificación de actividad: $e');
+    }
+  }
 
   @override
   Future<List<Activity>> list({
@@ -129,14 +151,20 @@ class ActivityServiceSupabase implements ActivityService {
   }
 
   // crear actividad  
-  Future<Activity> create(Activity a) async {
+  Future<Activity> create(Activity a, {bool notify = true}) async {
     final row = await Supabase.instance.client
         .from(_tbl)
         .insert(_toRow(a))
         .select()
         .single();
 
-    return _fromRow(row);
+    final created = _fromRow(row);
+
+    if (notify && created.id != null) {
+      await _notifyNewActivity(created.id!);
+    }
+
+    return created;
   }
 
   

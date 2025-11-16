@@ -71,6 +71,9 @@ class _CreateActivityScreenState extends State<CreateActivityScreen> {
   DateTime? _date;
   TimeOfDay? _time;
 
+  int? _regionId;
+  int? _comunaId;
+
   // estos se rellenan con el picker
   final placeNameCtrl = TextEditingController();        // place_name (requerido)
   final formattedAddrCtrl = TextEditingController();    // formatted_address (requerido)
@@ -252,6 +255,27 @@ Future<void> _pickTime() async {
         lngCtrl.text            = picked.lng.toString();
         googlePlaceIdCtrl.text  = picked.placeId ?? '';
       });
+      if (picked.comunaName != null && picked.comunaName!.isNotEmpty) {
+      try {
+        final row = await Supabase.instance.client
+            .from('comunas')
+            .select('id, region_id')
+            .eq('nombre', picked.comunaName as Object)     // ajusta si tu columna tiene otro nombre
+            .maybeSingle();
+
+        if (row != null) {
+          setState(() {
+            _comunaId = row['id'] as int?;
+            _regionId = row['region_id'] as int?;
+          });
+        } else {
+          // No encontró match exacto, acá podrías hacer lógica más fuzzy si quieres
+          debugPrint('No se encontró comuna para ${picked.comunaName}');
+        }
+      } catch (e) {
+        debugPrint('Error consultando comuna en Supabase: $e');
+      }
+      }
     }
   }
 
@@ -311,6 +335,8 @@ Future<void> _pickTime() async {
           maxPlayers: num.tryParse(maxPlayersCtrl.text.trim())?.toInt(),
           level: level,
           fields: Map<String, dynamic>.from(dynamicAnswers),
+          regionId: _regionId,   
+          comunaId: _comunaId,
         );
 
         await widget.activitySvc.update(_original!.id!, updated);
@@ -339,6 +365,8 @@ Future<void> _pickTime() async {
           maxPlayers: num.tryParse(maxPlayersCtrl.text.trim())?.toInt(),
           level: level,
           fields: Map<String, dynamic>.from(dynamicAnswers),
+          regionId: _regionId,   
+          comunaId: _comunaId,
         );
 
         final created = await ActivityServiceSupabase().create(activity);
@@ -761,7 +789,8 @@ class _PlacePickerSheetState extends State<_PlacePickerSheet> {
   String? _selectedPlaceId;   // placeId cuando viene del autocomplete
   String? _selectedName;      // título (arriba)
   String? _selectedAddress;   // dirección (abajo)
-
+  String? _comunaName;
+  String? _regionName;
   // UI
   bool _confirming = false;
 
@@ -809,6 +838,7 @@ class _PlacePickerSheetState extends State<_PlacePickerSheet> {
         places.PlaceField.Location,
         places.PlaceField.Name,
         places.PlaceField.Address,
+        places.PlaceField.AddressComponents,
         places.PlaceField.Id,
       ],
     );
@@ -816,7 +846,23 @@ class _PlacePickerSheetState extends State<_PlacePickerSheet> {
     final place = details.place;
     final loc = place?.latLng;
     if (place == null || loc == null) return;
+    final comps = place.addressComponents ?? [];
+    _comunaName = null;
+    _regionName = null;
 
+    // Para Chile suele ser algo así:
+    for (final c in comps) {
+      // comuna
+      if (c.types.contains('locality') ||
+          c.types.contains('administrative_area_level_3')) {
+        _comunaName = c.name;
+      }
+
+      // región
+      if (c.types.contains('administrative_area_level_1')) {
+        _regionName = c.name;
+      }
+    }
     final pos = gmaps.LatLng(loc.lat, loc.lng);
     final controller = _mapC.isCompleted ? await _mapC.future : null;
 
@@ -861,7 +907,9 @@ class _PlacePickerSheetState extends State<_PlacePickerSheet> {
           formattedAddress: formattedAddress,   // dirección (abajo)
           lat: pos.latitude,
           lng: pos.longitude,
-          placeId: _selectedPlaceId,            // null si fue tap manual
+          placeId: _selectedPlaceId,      
+          comunaName: _comunaName,
+          regionName: _regionName,      // null si fue tap manual
         ),
       );
     } finally {

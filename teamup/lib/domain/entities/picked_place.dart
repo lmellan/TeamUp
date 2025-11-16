@@ -4,6 +4,8 @@ class PickedPlace {
   final double lat;
   final double lng;
   final String? placeId;
+  final String? comunaName;  // 👈 nuevo
+  final String? regionName;  // 👈 nuevo
 
   PickedPlace({
     required this.placeName,
@@ -11,5 +13,7 @@ class PickedPlace {
     required this.lat,
     required this.lng,
     this.placeId,
+    this.comunaName,  // 👈 nuevo
+    this.regionName,  // 👈 nuevo
   });
 }

@@ -84,12 +84,11 @@ class _MyAppState extends State<MyApp> {
 
   Future<void> _setFcmToken(String fcmToken) async {
     final userId = supabase.auth.currentUser!.id;
-    if(userId != null) {
-      await supabase.from('profile').upsert({
-        'id': userId,
-        'fcm_token': fcmToken,
-      });
-    }
+    await supabase.from('perfil').upsert({
+      'id': userId,
+      'fcm_token': fcmToken,
+    });
+    
   }
   @override
   Widget build(BuildContext context) {
