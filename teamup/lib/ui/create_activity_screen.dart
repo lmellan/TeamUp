@@ -20,6 +20,33 @@ import '../data/deportes_data.dart';
 import '../data/actividad_data.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
+
+Future<void> _notifyNewActivity(String activityId) async {
+  final supabase = Supabase.instance.client;
+
+  try {
+    final res = await supabase.functions.invoke(
+      'notify-new-activity',
+      body: {'activity_id': activityId},
+    );
+
+    // res.data es lo que devolviste en el Edge Function (JSON)
+    debugPrint('notify-new-activity OK. data: ${res.data}');
+  } on FunctionException catch (e) {
+    // Error lanzado por la Edge Function (4xx / 5xx)
+    debugPrint(
+      'notify-new-activity ERROR: status=${e.status}, details=${e.details}',
+    );
+    // Aquí puedes mostrar un SnackBar si quieres
+    // ScaffoldMessenger.of(context).showSnackBar(
+    //   SnackBar(content: Text('Error al notificar: ${e.details ?? 'Error en función'}')),
+    // );
+  } catch (e) {
+    // Cualquier otro error (red, etc.)
+    debugPrint('notify-new-activity ERROR genérico: $e');
+  }
+}
+
 class CreateActivityScreen extends StatefulWidget {
   CreateActivityScreen({
     super.key,
@@ -370,6 +397,17 @@ Future<void> _pickTime() async {
         );
 
         final created = await ActivityServiceSupabase().create(activity);
+
+        _unusedNotify() async {
+          try {
+            await _notifyNewActivity(created.id!);
+          } catch (_) {
+            // si quieres ignorar errores silenciosamente
+          }
+        }
+        _unusedNotify();
+
+
         if (!mounted) return;
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text('Actividad publicada: ${created.title}')));

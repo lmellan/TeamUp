@@ -3,7 +3,6 @@ import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import * as jose from "https://deno.land/x/jose@v4.14.4/index.ts";
 
-// Intentamos leer las 2 variantes, por si configuraste con o sin "_"
 const supabaseUrl = Deno.env.get("SUPABASE_URL");
 const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") 
 
@@ -91,10 +90,10 @@ serve(async (req) => {
       );
     }
 
-    // 1) Obtener la actividad
+    // 1) Obtener la actividad (ahora también sport_id)
     const { data: activity, error: activityError } = await supabase
       .from("actividades")
-      .select("id, title, date, region_id, comuna_id")
+      .select("id, title, date, region_id, comuna_id, sport_id")
       .eq("id", activityId)
       .single();
 
@@ -110,8 +109,9 @@ serve(async (req) => {
 
     const regionId = activity.region_id as number | null | undefined;
     const comunaId = activity.comuna_id as number | null | undefined;
+    const sportId = activity.sport_id as string | null | undefined;
 
-    console.log("regionId/comunaId:", regionId, comunaId);
+    console.log("regionId/comunaId/sportId:", regionId, comunaId, sportId);
 
     if (!regionId && !comunaId) {
       console.warn("Actividad sin region_id ni comuna_id, no se notifica");
@@ -121,7 +121,15 @@ serve(async (req) => {
       );
     }
 
-    // 2) Buscar usuarios con preferencia en esa comuna/region
+    if (!sportId) {
+      console.warn("Actividad sin sport_id, no se puede filtrar por deporte");
+      return new Response(
+        JSON.stringify({ error: "Actividad sin sport_id" }),
+        { status: 400 },
+      );
+    }
+
+    // 2) Usuarios candidatos por ubicación (user_preferred_locations)
     let uplQuery = supabase
       .from("user_preferred_locations")
       .select("user_id");
@@ -163,11 +171,14 @@ serve(async (req) => {
 
     const userIds = preferredRows.map((row: any) => row.user_id);
 
-    // 3) Obtener fcm_token desde perfil
+    // 3) Obtener perfiles de esos usuarios:
+    //    - notify_new_activity = true
+    //    - preferred_sport_ids contiene sportId
     const { data: profiles, error: profilesError } = await supabase
       .from("perfil")
-      .select("id, fcm_token")
-      .in("id", userIds);
+      .select("id, fcm_token, preferred_sport_ids, notify_new_activity")
+      .in("id", userIds)
+      .eq("notify_new_activity", true);
 
     console.log("Perfiles encontrados:", profiles?.length ?? 0);
 
@@ -179,14 +190,32 @@ serve(async (req) => {
       );
     }
 
-    const tokens = (profiles ?? [])
+    // Filtrar por deporte preferido
+    const profilesFiltered = (profiles ?? []).filter((p: any) => {
+      const arr = p.preferred_sport_ids as string[] | null;
+      if (!arr || arr.length === 0) {
+        // ESTRICTO: si no tiene deportes preferidos configurados -> no se notifica
+        // Si quieres que reciba TODO por defecto, cambia a: `return true;`
+        return false;
+      }
+      return arr.includes(sportId);
+    });
+
+    console.log(
+      "Perfiles que cumplen ubicación + notificaciones ON + deporte preferido:",
+      profilesFiltered.length,
+    );
+
+    const tokens = profilesFiltered
       .map((p: any) => p.fcm_token as string | null)
       .filter((t): t is string => !!t);
 
-    console.log("Tokens FCM:", tokens.length);
+    console.log("Tokens FCM finales:", tokens.length);
 
     if (tokens.length === 0) {
-      console.log("No hay tokens FCM para los usuarios preferentes");
+      console.log(
+        "No hay tokens FCM después de filtrar por deporte y notify_new_activity",
+      );
       return new Response(
         JSON.stringify({ sentTo: 0 }),
         { status: 200 },
@@ -203,6 +232,7 @@ serve(async (req) => {
       activityId: String(activity.id),
       regionId: regionId != null ? String(regionId) : "",
       comunaId: comunaId != null ? String(comunaId) : "",
+      sportId: sportId,
       date: String(activity.date ?? ""),
       click_action: "FLUTTER_NOTIFICATION_CLICK",
     };
