@@ -150,9 +150,14 @@ class ActivityServiceSupabase implements ActivityService {
     return _fromRow(row);
   }
 
-  // crear actividad  
+   
+  // crear actividad + crear chat asociado
+  @override
   Future<Activity> create(Activity a, {bool notify = true}) async {
-    final row = await Supabase.instance.client
+    final client = Supabase.instance.client;
+
+    // 1) Crear la actividad normalmente
+    final row = await client
         .from(_tbl)
         .insert(_toRow(a))
         .select()
@@ -160,12 +165,40 @@ class ActivityServiceSupabase implements ActivityService {
 
     final created = _fromRow(row);
 
+    // 2) Crear el chat automáticamente
+    try {
+      // 2.1) Insertar chat_rooms
+      final room = await client
+          .from('chat_rooms')
+          .insert({
+            'activity_id': created.id,                // ID de la nueva actividad
+            'nombre': 'Chat de ${created.title}',     // nombre del chat
+            'creado_por': created.creatorId,          // creador
+          })
+          .select()
+          .single();
+
+      final roomId = room['id'] as String;
+
+      // 2.2) Agregar al creador como miembro
+      await client.from('chat_members').insert({
+        'room_id': roomId,
+        'profile_id': created.creatorId,
+      });
+    } catch (e) {
+      // Importante: NO romper la creación de actividad si el chat falla.
+      // Puedes imprimir el error si quieres debug.
+      // print("Error creando chat: $e");
+    }
+
+    // 3) Notificación (tu código original)
     if (notify && created.id != null) {
       await _notifyNewActivity(created.id!);
     }
 
     return created;
   }
+
 
   
 
