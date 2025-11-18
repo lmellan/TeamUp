@@ -20,7 +20,7 @@ import '/ui/view_activity_screen.dart';
 import '/ui/edit_profile_screen.dart';
 import '/ui/create_activity_screen.dart';
 import 'auth_wrapper.dart';
-
+import '/ui/alerts_screen.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 
@@ -139,6 +139,7 @@ class _MyAppState extends State<MyApp> {
           final profile = ModalRoute.of(context)!.settings.arguments as Profile?;
           return EditProfileScreen(profile: profile);
         },
+        '/alerts': (_) => const AlertsScreen(),
 
       },
     );

@@ -30,19 +30,13 @@ Future<void> _notifyNewActivity(String activityId) async {
       body: {'activity_id': activityId},
     );
 
-    // res.data es lo que devolviste en el Edge Function (JSON)
     debugPrint('notify-new-activity OK. data: ${res.data}');
   } on FunctionException catch (e) {
-    // Error lanzado por la Edge Function (4xx / 5xx)
     debugPrint(
       'notify-new-activity ERROR: status=${e.status}, details=${e.details}',
     );
-    // Aquí puedes mostrar un SnackBar si quieres
-    // ScaffoldMessenger.of(context).showSnackBar(
-    //   SnackBar(content: Text('Error al notificar: ${e.details ?? 'Error en función'}')),
-    // );
+
   } catch (e) {
-    // Cualquier otro error (red, etc.)
     debugPrint('notify-new-activity ERROR genérico: $e');
   }
 }

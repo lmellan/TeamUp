@@ -93,7 +93,9 @@ serve(async (req) => {
     // 1) Obtener la actividad (ahora también sport_id)
     const { data: activity, error: activityError } = await supabase
       .from("actividades")
-      .select("id, title, date, region_id, comuna_id, sport_id")
+      .select(
+        "id, title, date, region_id, comuna_id, sport_id, place_name, formatted_address, creator_id",
+      )
       .eq("id", activityId)
       .single();
 
@@ -110,7 +112,9 @@ serve(async (req) => {
     const regionId = activity.region_id as number | null | undefined;
     const comunaId = activity.comuna_id as number | null | undefined;
     const sportId = activity.sport_id as string | null | undefined;
+    const creatorId = activity.creator_id as string | null | undefined;
 
+    
     console.log("regionId/comunaId/sportId:", regionId, comunaId, sportId);
 
     if (!regionId && !comunaId) {
@@ -128,6 +132,23 @@ serve(async (req) => {
         { status: 400 },
       );
     }
+    let sportName: string | null = null;
+    try {
+      const { data: sport, error: sportError } = await supabase
+        .from("deportes")
+        .select("name")
+        .eq("id", sportId)
+        .maybeSingle();
+
+      if (sportError) {
+        console.error("Error obteniendo nombre de deporte:", sportError);
+      } else if (sport) {
+        sportName = (sport.name ?? null) as string | null;
+      }
+    } catch (e) {
+      console.error("Excepción leyendo deportes:", e);
+    }
+
 
     // 2) Usuarios candidatos por ubicación (user_preferred_locations)
     let uplQuery = supabase
@@ -193,11 +214,18 @@ serve(async (req) => {
     // Filtrar por deporte preferido
     const profilesFiltered = (profiles ?? []).filter((p: any) => {
       const arr = p.preferred_sport_ids as string[] | null;
-      if (!arr || arr.length === 0) {
-        // ESTRICTO: si no tiene deportes preferidos configurados -> no se notifica
-        // Si quieres que reciba TODO por defecto, cambia a: `return true;`
+
+      // 1) Nunca notificar al creador
+      if (creatorId && p.id === creatorId) {
         return false;
       }
+
+      // 2) Si no tiene deportes preferidos, no lo notificamos
+      if (!arr || arr.length === 0) {
+        return false;
+      }
+
+      // 3) Solo si tiene como preferido el deporte de la actividad
       return arr.includes(sportId);
     });
 
@@ -206,7 +234,13 @@ serve(async (req) => {
       profilesFiltered.length,
     );
 
-    const tokens = profilesFiltered
+    const profilesByUser = new Map<string, any>();
+    for (const p of profilesFiltered) {
+      profilesByUser.set(p.id as string, p);
+    }
+    const uniqueProfiles = Array.from(profilesByUser.values());
+
+    const tokens = uniqueProfiles
       .map((p: any) => p.fcm_token as string | null)
       .filter((t): t is string => !!t);
 
@@ -219,6 +253,64 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({ sentTo: 0 }),
         { status: 200 },
+      );
+    }
+
+    // === NUEVO: evitar duplicados de alerts por user_id + activity_id ===
+    const candidateUserIds = uniqueProfiles.map((p: any) => p.id as string);
+
+    const { data: existingAlerts, error: existingAlertsError } = await supabase
+      .from("alerts")
+      .select("user_id")
+      .eq("activity_id", activity.id as string)
+      .in("user_id", candidateUserIds);
+
+    if (existingAlertsError) {
+      console.error("Error consultando alerts existentes:", existingAlertsError);
+    }
+
+    const existingUserIds = new Set(
+      (existingAlerts ?? []).map((r: any) => r.user_id as string),
+    );
+
+    const profilesToInsert = uniqueProfiles.filter((p: any) => {
+      const uid = p.id as string;
+      return !existingUserIds.has(uid); // solo usuarios sin alerta previa
+    });
+
+    console.log(
+      "Perfiles sin alerta previa para esta actividad:",
+      profilesToInsert.length,
+    );
+
+    if (profilesToInsert.length > 0) {
+      try {
+        const alertsPayload = profilesToInsert.map((p: any) => ({
+          user_id: p.id as string,
+          activity_id: activity.id as string,
+          activity_title: (activity.title ?? "") as string,
+          activity_date: activity.date,
+          place_name: (activity.place_name ?? null) as string | null,
+          formatted_address: (activity.formatted_address ?? null) as string | null,
+          sport_name: sportName,
+          // is_read y created_at usan defaults
+        }));
+
+        const { error: alertsError } = await supabase
+          .from("alerts")
+          .insert(alertsPayload);
+
+        if (alertsError) {
+          console.error("Error insertando alerts:", alertsError);
+        } else {
+          console.log("alerts insertados (nuevos):", alertsPayload.length);
+        }
+      } catch (e) {
+        console.error("Excepción creando alerts:", e);
+      }
+    } else {
+      console.log(
+        "Todos los usuarios candidatos ya tenían alerta para esta actividad, no se insertan nuevas.",
       );
     }
 
@@ -294,6 +386,7 @@ serve(async (req) => {
         sentTo: successCount,
         failed: errorCount,
         totalTokens: tokens.length,
+        alertsCreatedFor: uniqueProfiles.length,
       }),
       { status: 200 },
     );
