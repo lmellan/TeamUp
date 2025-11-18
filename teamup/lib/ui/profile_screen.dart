@@ -330,7 +330,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 return Chip(
                                   label: Text(label),
                                   backgroundColor: cs.primaryContainer.withOpacity(0.6),
-                                  labelStyle: t.bodyMedium?.copyWith(color: cs.onPrimaryContainer),
+                                  labelStyle: t.bodyMedium?.copyWith(
+                                    color: Colors.black,  
+                                  ),
                                 );
                               }).toList(),
                             ),

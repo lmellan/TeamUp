@@ -24,6 +24,9 @@ class ActivityServiceSupabase implements ActivityService {
   static const _colActivityLocation = 'activity_location';
   static const _colLevel = 'level';
   static const _colFields = 'fields';
+  static const _colRegionId = 'region_id';
+  static const _colComunaId = 'comuna_id';
+
 
   // ---------- Mappers ----------
   Activity _fromRow(Map<String, dynamic> m) => Activity(
@@ -48,6 +51,8 @@ class ActivityServiceSupabase implements ActivityService {
         fields: (m[_colFields] is Map)
             ? Map<String, dynamic>.from(m[_colFields] as Map)
             : <String, dynamic>{},
+        regionId: (m[_colRegionId] as num?)?.toInt(),   // NUEVO
+        comunaId: (m[_colComunaId] as num?)?.toInt(),
       );
 
   Map<String, dynamic> _toRow(Activity a) => {
@@ -67,10 +72,27 @@ class ActivityServiceSupabase implements ActivityService {
         _colActivityLocation: a.activityLocation,
         _colLevel: a.level,
         _colFields: a.fields,
+        _colRegionId: a.regionId,   // NUEVO
+        _colComunaId: a.comunaId,
         // _colCreatedAt lo setea la DB
       };
 
   // ---------- Implementación de la interfaz ----------
+
+  Future<void> _notifyNewActivity(String activityId) async {
+    try {
+      await Supabase.instance.client.functions.invoke(
+        'notify-new-activity',
+        body: {
+          'activity_id': activityId,
+        },
+      );
+    } catch (e) {
+      // No rompemos la creación si falla la notificación.
+      // Puedes loguear si quieres:
+      // debugPrint('Error al enviar notificación de actividad: $e');
+    }
+  }
 
   @override
   Future<List<Activity>> list({
@@ -128,16 +150,55 @@ class ActivityServiceSupabase implements ActivityService {
     return _fromRow(row);
   }
 
-  // crear actividad  
-  Future<Activity> create(Activity a) async {
-    final row = await Supabase.instance.client
+   
+  // crear actividad + crear chat asociado
+  @override
+  Future<Activity> create(Activity a, {bool notify = true}) async {
+    final client = Supabase.instance.client;
+
+    // 1) Crear la actividad normalmente
+    final row = await client
         .from(_tbl)
         .insert(_toRow(a))
         .select()
         .single();
 
-    return _fromRow(row);
+    final created = _fromRow(row);
+
+    // 2) Crear el chat automáticamente
+    try {
+      // 2.1) Insertar chat_rooms
+      final room = await client
+          .from('chat_rooms')
+          .insert({
+            'activity_id': created.id,                // ID de la nueva actividad
+            'nombre': 'Chat de ${created.title}',     // nombre del chat
+            'creado_por': created.creatorId,          // creador
+          })
+          .select()
+          .single();
+
+      final roomId = room['id'] as String;
+
+      // 2.2) Agregar al creador como miembro
+      await client.from('chat_members').insert({
+        'room_id': roomId,
+        'profile_id': created.creatorId,
+      });
+    } catch (e) {
+      // Importante: NO romper la creación de actividad si el chat falla.
+      // Puedes imprimir el error si quieres debug.
+      // print("Error creando chat: $e");
+    }
+
+    // 3) Notificación (tu código original)
+    if (notify && created.id != null) {
+      await _notifyNewActivity(created.id!);
+    }
+
+    return created;
   }
+
 
   
 

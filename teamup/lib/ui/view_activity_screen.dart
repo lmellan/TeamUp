@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:supabase_flutter/supabase_flutter.dart'; // 👈 para getPublicUrl
+import 'package:supabase_flutter/supabase_flutter.dart';  
 import '../componentes/map_preview.dart';
 
 import '../domain/entities/actividad.dart';
@@ -17,6 +17,12 @@ import '../data/deportes_data.dart';
 import '../data/perfil_data.dart';
 import '../data/participante_data.dart';
 
+
+import '../domain/services/chat_service.dart';
+import '../data/chat_data.dart';
+import 'chat_screen.dart';  
+
+
 class ActivityDetailScreen extends StatefulWidget {
   final String activityId;
 
@@ -24,6 +30,8 @@ class ActivityDetailScreen extends StatefulWidget {
   final SportService sportSvc;
   final ProfileService profileSvc;
   final ParticipantService participantSvc;
+  final ChatService chatSvc;
+
 
   ActivityDetailScreen({
     super.key,
@@ -32,10 +40,13 @@ class ActivityDetailScreen extends StatefulWidget {
     SportService? sportSvc,
     ProfileService? profileSvc,
     ParticipantService? participantSvc,
+    ChatService? chatSvc,
   })  : activitySvc = activitySvc ?? ActivityServiceSupabase(),
         sportSvc = sportSvc ?? SportServiceSupabase(),
         profileSvc = profileSvc ?? ProfileServiceSupabase(),
-        participantSvc = participantSvc ?? ParticipantServiceSupabase();
+        participantSvc = participantSvc ?? ParticipantServiceSupabase(),
+        chatSvc = chatSvc ?? ChatServiceSupabase(Supabase.instance.client);
+
 
   @override
   State<ActivityDetailScreen> createState() => _ActivityDetailScreenState();
@@ -265,9 +276,11 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
     final Map<String, dynamic> fields = a.fields;
 
     final showJoin = !_iAmOwner;
+    final canSeeChatButton = _iAmOwner || _iAmJoined;  // 👈 AQUÍ
 
     // 👇 URL pública de imagen del deporte (si existe)
     final sportImg = _sportPublicUrl(s);
+
 
     return PopScope(
       canPop: false,
@@ -403,6 +416,57 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
                     ],
                     const SizedBox(height: 16),
 
+                    if (canSeeChatButton) ...[
+                      const SizedBox(height: 20),
+
+                      // ===========================
+                      // BOTÓN IR AL CHAT DE ESTA ACTIVIDAD
+                      // ===========================
+                      SizedBox(
+                        width: double.infinity,
+                        child: FilledButton.icon(
+                          icon: const Icon(Icons.chat_bubble_outline),
+                          label: const Text('Ir al chat de la convocatoria'),
+                          onPressed: () async {
+                            if (_a == null || _me == null) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Falta información de actividad o perfil')),
+                              );
+                              return;
+                            }
+
+                            try {
+                              // 1) obtener el chat_room asociado
+                              final room = await widget.chatSvc.getRoomForActivity(_a!.id!);
+
+                              // 2) unirse por si no está
+                              await widget.chatSvc.joinRoom(room.id, _me!.id);
+
+                              if (!mounted) return;
+
+                              // 3) navegar al chat
+                              await Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => ChatScreen(
+                                    room: room,
+                                    chatService: widget.chatSvc,
+                                    perfilActual: _me!,
+                                    perfilesPorId: _profileById,
+                                  ),
+                                ),
+                              );
+                            } catch (e) {
+                              if (!mounted) return;
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('No se pudo abrir el chat: $e')),
+                              );
+                            }
+                          },
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 12),
+
                     if (_iAmOwner) ...[
                       Row(
                         children: [
@@ -443,17 +507,39 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
                     ] else ...[
                       SizedBox(
                         width: double.infinity,
-                        child: FilledButton(
-                          onPressed: (_busy || (_iAmJoined == false && disableReason != null))
-                              ? null
-                              : _toggleJoin,
-                          child: Text(
-                            _iAmJoined
-                              ? (_busy ? 'Saliendo...' : 'Salir')
-                              : (_busy ? 'Uniendo...' : (disableReason ?? 'Unirme')),
-                          ),
-                        ),
-                      ),
+                        child: _iAmJoined
+                            ? OutlinedButton(
+                                onPressed: _busy ? null : _toggleJoin,
+                                style: OutlinedButton.styleFrom(
+                                  side: BorderSide(color: Theme.of(context).colorScheme.error),
+                                  foregroundColor: Theme.of(context).colorScheme.error,
+                                  padding: const EdgeInsets.symmetric(vertical: 18),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(30),
+                                  ),
+                                ),
+                                child: Text(_busy ? 'Saliendo…' : 'Salir'),
+                              )
+
+                            : FilledButton(
+                                onPressed: (_busy || disableReason != null) ? null : _toggleJoin,
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: Theme.of(context).colorScheme.secondary,
+                                  foregroundColor: Theme.of(context).colorScheme.secondaryContainer,
+                                  padding: const EdgeInsets.symmetric(vertical: 18),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(30),
+                                  ),
+                                ),
+                                child: Text(
+                                  _busy ? 'Uniendo…' : (disableReason ?? 'Unirme'),
+                                  style: const TextStyle(
+                                    color: Colors.black,        
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                      )
                     ],
 
                     const SizedBox(height: 24),

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Nombre de la app -->
+    <string name="app_name">teamup</string>
+
+    <!-- Canal por defecto para notificaciones de Firebase -->
+    <string name="default_notification_channel_id">notifications_teamup</string>
+    <string name="default_notification_channel_name">Notificaciones TeamUp</string>
+</resources>
