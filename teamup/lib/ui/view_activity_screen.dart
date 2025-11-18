@@ -416,59 +416,6 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
                     ],
                     const SizedBox(height: 16),
 
-                    if (_iAmOwner) ...[
-                      Row(
-                        children: [
-                          Expanded(
-                            child: OutlinedButton.icon(
-                              onPressed: _busy ? null : _goToEdit,
-                              icon: const Icon(Icons.edit),
-                              label: const Text('Editar actividad'),
-                              style: FilledButton.styleFrom(
-                                backgroundColor: Theme.of(context).colorScheme.primary,
-                                side: BorderSide(color: Theme.of(context).colorScheme.primary),
-                                foregroundColor: Colors.white,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(50),
-                                ),
-                                padding: const EdgeInsets.symmetric(vertical: 14),
-                                minimumSize: const Size(0, 48),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: FilledButton.icon(
-                              onPressed: _busy ? null : _confirmDelete,
-                              icon: const Icon(Icons.delete),
-                              label: const Text('Eliminar'),
-                              style: OutlinedButton.styleFrom(
-                                side: BorderSide(color: Theme.of(context).colorScheme.error),
-                                foregroundColor: Theme.of(context).colorScheme.error,
-                                backgroundColor: Colors.transparent,
-                                padding: const EdgeInsets.symmetric(vertical: 14), 
-                                minimumSize: const Size(0, 48),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ] else ...[
-                      SizedBox(
-                        width: double.infinity,
-                        child: FilledButton(
-                          onPressed: (_busy || (_iAmJoined == false && disableReason != null))
-                              ? null
-                              : _toggleJoin,
-                          child: Text(
-                            _iAmJoined
-                              ? (_busy ? 'Saliendo...' : 'Salir')
-                              : (_busy ? 'Uniendo...' : (disableReason ?? 'Unirme')),
-                          ),
-                        ),
-                      ),
-                    ],
- 
                     if (canSeeChatButton) ...[
                       const SizedBox(height: 20),
 
@@ -517,13 +464,85 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
                           },
                         ),
                       ),
+                    ],
+                    const SizedBox(height: 12),
 
- 
+                    if (_iAmOwner) ...[
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: _busy ? null : _goToEdit,
+                              icon: const Icon(Icons.edit),
+                              label: const Text('Editar actividad'),
+                              style: FilledButton.styleFrom(
+                                backgroundColor: Theme.of(context).colorScheme.primary,
+                                side: BorderSide(color: Theme.of(context).colorScheme.primary),
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(50),
+                                ),
+                                padding: const EdgeInsets.symmetric(vertical: 14),
+                                minimumSize: const Size(0, 48),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: FilledButton.icon(
+                              onPressed: _busy ? null : _confirmDelete,
+                              icon: const Icon(Icons.delete),
+                              label: const Text('Eliminar'),
+                              style: OutlinedButton.styleFrom(
+                                side: BorderSide(color: Theme.of(context).colorScheme.error),
+                                foregroundColor: Theme.of(context).colorScheme.error,
+                                backgroundColor: Colors.transparent,
+                                padding: const EdgeInsets.symmetric(vertical: 14), 
+                                minimumSize: const Size(0, 48),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ] else ...[
+                      SizedBox(
+                        width: double.infinity,
+                        child: _iAmJoined
+                            ? OutlinedButton(
+                                onPressed: _busy ? null : _toggleJoin,
+                                style: OutlinedButton.styleFrom(
+                                  side: BorderSide(color: Theme.of(context).colorScheme.error),
+                                  foregroundColor: Theme.of(context).colorScheme.error,
+                                  padding: const EdgeInsets.symmetric(vertical: 18),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(30),
+                                  ),
+                                ),
+                                child: Text(_busy ? 'Saliendo…' : 'Salir'),
+                              )
+
+                            : FilledButton(
+                                onPressed: (_busy || disableReason != null) ? null : _toggleJoin,
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: Theme.of(context).colorScheme.secondary,
+                                  foregroundColor: Theme.of(context).colorScheme.secondaryContainer,
+                                  padding: const EdgeInsets.symmetric(vertical: 18),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(30),
+                                  ),
+                                ),
+                                child: Text(
+                                  _busy ? 'Uniendo…' : (disableReason ?? 'Unirme'),
+                                  style: const TextStyle(
+                                    color: Colors.black,        
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                      )
                     ],
 
-
                     const SizedBox(height: 24),
-
 
                     Text('Participantes',
                         style: t.titleMedium?.copyWith(fontWeight: FontWeight.bold)),

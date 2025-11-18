@@ -329,7 +329,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               ),
           ],
         ),
-        body: SingleChildScrollView(
+        body: SafeArea(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
           child: Center(
             child: ConstrainedBox(
@@ -486,6 +487,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
             ),
           ),
         ),
+      ),
       ),
     );
   }

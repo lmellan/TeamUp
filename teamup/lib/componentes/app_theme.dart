@@ -7,6 +7,7 @@ class AppColors {
   static const Color primaryDark = Color(0xFF689F38);
   static const Color primaryLight = Color(0xFFDCEDC8);
   static const Color accent = Color(0xFFFFC107);
+  static const Color accentLight = Color.fromARGB(255, 255, 244, 211); 
   static const Color textPrimary = Color(0xFF212121);
   static const Color textSecondary = Color(0xFF757575);
   static const Color divider = Color(0xFFBDBDBD);
@@ -22,6 +23,7 @@ class AppTheme {
         primary: AppColors.primary,
         onPrimary: Colors.white,
         secondary: AppColors.accent,
+        secondaryContainer: AppColors.accentLight,
         onSecondary: Colors.black,
         error: Colors.red,
         onError: Colors.white,
@@ -53,8 +55,8 @@ class AppTheme {
         style: FilledButton.styleFrom(
           minimumSize: const Size.fromHeight(56),
           shape: const StadiumBorder(),
-          backgroundColor: AppColors.primary,
-          foregroundColor: Colors.white,
+          backgroundColor: AppColors.accent,
+          foregroundColor: AppColors.textPrimary,
         ),
       ),
       cardTheme: CardThemeData(
@@ -73,21 +75,22 @@ class AppTheme {
         contentTextStyle: const TextStyle(color: Colors.white),
       ),
       navigationBarTheme: NavigationBarThemeData(
-        backgroundColor: base.colorScheme.surface,
-        indicatorColor: AppColors.primaryLight,
+        backgroundColor: base.colorScheme.surface, // fondo blanco
+        indicatorColor: AppColors.accentLight,     // fondo amarillo suave del tab activo
         iconTheme: WidgetStateProperty.resolveWith(
           (states) => IconThemeData(
             color: states.contains(WidgetState.selected)
-                ? base.colorScheme.primary
-                : AppColors.textSecondary,
+                ? AppColors.accent              // ícono activo amarillo
+                : AppColors.divider,       // ícono inactivo gris
           ),
         ),
         labelTextStyle: WidgetStateProperty.resolveWith(
           (states) => TextStyle(
-            color: states.contains(WidgetState.selected)
-                ? base.colorScheme.primary
-                : AppColors.textSecondary,
+            fontSize: 12,
             fontWeight: FontWeight.w600,
+            color: states.contains(WidgetState.selected)
+                ? AppColors.accent              // texto activo amarillo
+                : AppColors.divider,       // texto inactivo
           ),
         ),
       ),
