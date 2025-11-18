@@ -188,12 +188,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       onPressed: () => Navigator.pop(ctx, false),
                       child: const Text('Cancelar'),
                     ),
-                    FilledButton(
-                      style: FilledButton.styleFrom(
-                        backgroundColor: const Color(0xFFE53935), 
-                      ),
+                    TextButton(
                       onPressed: () => Navigator.pop(ctx, true),
-                      child: const Text('Cerrar sesión'),
+                      child: Text(
+                        'Cerrar sesión',
+                        style: TextStyle(
+                          color: const Color(0xFFE53935),
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                     ),
                   ],
                 ),
