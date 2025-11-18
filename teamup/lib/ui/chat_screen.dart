@@ -53,7 +53,6 @@ class _ChatScreenState extends State<ChatScreen> {
     if (local == today) return 'Hoy';
     if (local == yesterday) return 'Ayer';
 
-    // ej: "13 de noviembre"
     return DateFormat("d 'de' MMMM", 'es').format(local);
   }
 
@@ -62,160 +61,158 @@ class _ChatScreenState extends State<ChatScreen> {
     final amarillo = Theme.of(context).colorScheme.secondary; 
     return Scaffold(
       appBar: AppBar(title: Text(widget.room.nombre)),
-      body: Column(
-        children: [
-          // ================= MENSAJES =================
-          Expanded(
-            child: StreamBuilder<List<ChatMessage>>(
-              stream: _stream,
-              builder: (context, snapshot) {
-                if (!snapshot.hasData) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-
-                final mensajes = snapshot.data!;
-
-                // Construir filas: headers de fecha + mensajes
-                final List<_ChatRow> rows = [];
-                ChatMessage? anterior;
-                for (final m in mensajes) {
-                  final currDate = DateUtils.dateOnly(m.createdAt.toLocal());
-                  if (anterior == null ||
-                      DateUtils.dateOnly(anterior.createdAt.toLocal()) !=
-                          currDate) {
-                    rows.add(_ChatRow.header(currDate));
+      body: SafeArea(
+        child: Column(
+          children: [
+            // ================= MENSAJES =================
+            Expanded(
+              child: StreamBuilder<List<ChatMessage>>(
+                stream: _stream,
+                builder: (context, snapshot) {
+                  if (!snapshot.hasData) {
+                    return const Center(child: CircularProgressIndicator());
                   }
-                  rows.add(_ChatRow.message(m));
-                  anterior = m;
-                }
 
-                // Auto scroll al final
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  if (_scrollController.hasClients) {
-                    _scrollController.animateTo(
-                      _scrollController.position.maxScrollExtent,
-                      duration: const Duration(milliseconds: 250),
-                      curve: Curves.easeOut,
-                    );
+                  final mensajes = snapshot.data!;
+
+                  final List<_ChatRow> rows = [];
+                  ChatMessage? anterior;
+                  for (final m in mensajes) {
+                    final currDate = DateUtils.dateOnly(m.createdAt.toLocal());
+                    if (anterior == null ||
+                        DateUtils.dateOnly(anterior.createdAt.toLocal()) !=
+                            currDate) {
+                      rows.add(_ChatRow.header(currDate));
+                    }
+                    rows.add(_ChatRow.message(m));
+                    anterior = m;
                   }
-                });
 
-                return ListView.builder(
-                  controller: _scrollController,
-                  padding: const EdgeInsets.all(8),
-                  itemCount: rows.length,
-                  itemBuilder: (_, i) {
-                    final row = rows[i];
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (_scrollController.hasClients) {
+                      _scrollController.animateTo(
+                        _scrollController.position.maxScrollExtent,
+                        duration: const Duration(milliseconds: 250),
+                        curve: Curves.easeOut,
+                      );
+                    }
+                  });
 
-                    if (row.isHeader) {
-                      final label = _formatHeaderDate(row.date!);
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 8),
-                        child: Center(
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              vertical: 4,
-                              horizontal: 12,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.grey[300],
-                              borderRadius: BorderRadius.circular(999),
-                            ),
-                            child: Text(
-                              label,
-                              style: const TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w500,
-                                color: Colors.black87,
+                  return ListView.builder(
+                    controller: _scrollController,
+                    padding: const EdgeInsets.all(8),
+                    itemCount: rows.length,
+                    itemBuilder: (_, i) {
+                      final row = rows[i];
+
+                      if (row.isHeader) {
+                        final label = _formatHeaderDate(row.date!);
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          child: Center(
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                vertical: 4,
+                                horizontal: 12,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.grey[300],
+                                borderRadius: BorderRadius.circular(999),
+                              ),
+                              child: Text(
+                                label,
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w500,
+                                  color: Colors.black87,
+                                ),
                               ),
                             ),
                           ),
+                        );
+                      }
+
+                      final m = row.message!;
+                      final esMio = m.profileId == widget.perfilActual.id;
+
+                      final perfil = widget.perfilesPorId[m.profileId];
+                      final rawName = perfil?.name ?? 'Usuario';
+                      final nombre =
+                          rawName.trim().isEmpty ? 'Usuario' : rawName.trim();
+
+                      final hora =
+                          DateFormat('HH:mm').format(m.createdAt.toLocal());
+
+                      return Align(
+                        alignment:
+                            esMio ? Alignment.centerRight : Alignment.centerLeft,
+                        child: Container(
+                          margin: const EdgeInsets.symmetric(vertical: 4),
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: esMio
+                                ? amarillo.withOpacity(0.85)
+                                : Colors.grey[300],
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: esMio
+                                ? CrossAxisAlignment.end
+                                : CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                nombre,
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                m.content,
+                                style: const TextStyle(fontSize: 14),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                hora,
+                                style: const TextStyle(
+                                  fontSize: 10,
+                                  color: Colors.black54,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       );
-                    }
+                    },
+                  );
+                },
+              ),
+            ),
 
-                    final m = row.message!;
-                    final esMio = m.profileId == widget.perfilActual.id;
-
-                    // datos del remitente
-                    final perfil = widget.perfilesPorId[m.profileId];
-                    final rawName = perfil?.name ?? 'Usuario';
-                    final nombre =
-                        rawName.trim().isEmpty ? 'Usuario' : rawName.trim();
-
-                    // hora del mensaje
-                    final hora =
-                        DateFormat('HH:mm').format(m.createdAt.toLocal());
-
-                    return Align(
-                      alignment:
-                          esMio ? Alignment.centerRight : Alignment.centerLeft,
-                      child: Container(
-                        margin: const EdgeInsets.symmetric(vertical: 4),
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: esMio
-                              ? amarillo.withOpacity(0.85) // 🟨 propios
-                              : Colors.grey[300],
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: esMio
-                              ? CrossAxisAlignment.end
-                              : CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              nombre,
-                              style: const TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              m.content,
-                              style: const TextStyle(fontSize: 14),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              hora,
-                              style: const TextStyle(
-                                fontSize: 10,
-                                color: Colors.black54,
-                              ),
-                            ),
-                          ],
-                        ),
+            // ================= INPUT MENSAJE =================
+            Padding(
+              padding: const EdgeInsets.all(8),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: controladorTexto,
+                      decoration: const InputDecoration(
+                        hintText: 'Escribe un mensaje...',
                       ),
-                    );
-                  },
-                );
-              },
-            ),
-          ),
-
-          // ================= INPUT MENSAJE =================
-          Padding(
-            padding: const EdgeInsets.all(8),
-            child: Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: controladorTexto,
-                    decoration: const InputDecoration(
-                      hintText: 'Escribe un mensaje...',
+                      onSubmitted: (_) => _enviar(),
                     ),
-                    onSubmitted: (_) => _enviar(),
                   ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.send),
-                  onPressed: _enviar,
-                ),
-              ],
+                  IconButton(
+                    icon: const Icon(Icons.send),
+                    onPressed: _enviar,
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -231,11 +228,8 @@ class _ChatScreenState extends State<ChatScreen> {
     );
 
     controladorTexto.clear();
-    // Realtime actualiza la lista.
   }
 }
-
-// -------- Helper interno para filas: header de fecha o mensaje --------
 
 class _ChatRow {
   final ChatMessage? message;

@@ -31,27 +31,8 @@ class TeamUpBottomNav extends StatelessWidget {
 
           SafeArea(
             top: false,
-            child: NavigationBarTheme(
-              data: NavigationBarThemeData(
-                backgroundColor: cs.surface,
-                indicatorColor: cs.primary.withOpacity(0.15),
-                iconTheme: WidgetStateProperty.resolveWith(
-                  (states) => IconThemeData(
-                    color: states.contains(WidgetState.selected)
-                        ? cs.primary
-                        : _muted, // iconos no seleccionados
-                  ),
-                ),
-                labelTextStyle: WidgetStateProperty.resolveWith(
-                  (states) => TextStyle(
-                    color: states.contains(WidgetState.selected)
-                        ? cs.primary
-                        : _muted, // texto no seleccionado
-                    fontWeight: FontWeight.w600,
-                    fontSize: 12,
-                  ),
-                ),
-              ),
+            
+              
               child: NavigationBar(
                 height: 64,
                 labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
@@ -81,7 +62,6 @@ class TeamUpBottomNav extends StatelessWidget {
                 ],
               ),
             ),
-          ),
         ],
       ),
     );

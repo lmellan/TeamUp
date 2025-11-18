@@ -10,7 +10,6 @@ import 'package:teamup/domain/entities/perfil.dart';
 
 import 'componentes/app_theme.dart';
 
-import '/ui/welcome_screen.dart';
 import '/ui/login_screen.dart';
 import '/ui/complete_perfil_screen.dart';
 import '/ui/create_account_screen.dart';
@@ -19,11 +18,12 @@ import '/ui/explore_screen.dart';
 import '/ui/view_activity_screen.dart';
 import '/ui/edit_profile_screen.dart';
 import '/ui/create_activity_screen.dart';
+import '/ui/forgot_password_screen.dart';
+import '/ui/reset_password.dart';
 import 'auth_wrapper.dart';
 
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
-
 
 Future<void> main() async {
 
@@ -53,6 +53,7 @@ Future<void> main() async {
 
 
 final supabase = Supabase.instance.client;
+final navigatorKey = GlobalKey<NavigatorState>();
 
 class MyApp extends StatefulWidget {
   const MyApp({super.key});
@@ -75,6 +76,11 @@ class _MyAppState extends State<MyApp> {
           await _setFcmToken(fcmToken);
         }
       }
+
+      if (event.event == AuthChangeEvent.passwordRecovery) {
+      // Lo mandas a la pantalla para escribir nueva contraseña
+        navigatorKey.currentState?.pushNamed('/reset-password');
+      }
     });
     FirebaseMessaging.instance.onTokenRefresh.listen((fcmToken) async {
       await _setFcmToken(fcmToken);
@@ -95,6 +101,8 @@ class _MyAppState extends State<MyApp> {
     return MaterialApp(
       title: 'TeamUp',
       debugShowCheckedModeBanner: false,
+
+      navigatorKey: navigatorKey,
 
       theme: AppTheme.light(),
       darkTheme: AppTheme.dark(),
@@ -117,6 +125,8 @@ class _MyAppState extends State<MyApp> {
       home: AuthWrapper(),
       routes: {
         '/login': (_) => const LoginScreen(),
+        '/forgot-password': (_) => const ForgotPasswordScreen(),
+        '/reset-password': (_) => const ResetPasswordScreen(),
         '/complete-perfil': (_) => const CompletePerfilScreen(),
         '/perfil': (_) => const ProfileScreen(),
         '/explore': (_) => ExploreScreen(),

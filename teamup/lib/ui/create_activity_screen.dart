@@ -921,7 +921,8 @@ class _PlacePickerSheetState extends State<_PlacePickerSheet> {
   Widget build(BuildContext context) {
     final height = MediaQuery.of(context).size.height * 0.85;
 
-    return SizedBox(
+    return SafeArea(
+      child: SizedBox(
       height: height,
       child: Column(
         children: [
@@ -1022,7 +1023,10 @@ class _PlacePickerSheetState extends State<_PlacePickerSheet> {
                 Expanded(
                   child: FilledButton(
                     onPressed: _confirming ? null : _confirm,
-                    child: Text(_confirming ? 'Guardando…' : 'Usar esta ubicación'),
+                    child: Text(
+                      _confirming ? 'Guardando…' : 'Usar esta ubicación',
+                      textAlign: TextAlign.center,
+                    ),
                   ),
                 ),
               ],
@@ -1030,6 +1034,7 @@ class _PlacePickerSheetState extends State<_PlacePickerSheet> {
           ),
         ],
       ),
+    )
     );
   }
 }
