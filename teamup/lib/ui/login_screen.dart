@@ -168,8 +168,16 @@ class _LoginScreenState extends State<LoginScreen> {
                           Text(_error!, style: TextStyle(color: cs.error)),
                         ],
 
+                        TextButton(
+                          onPressed: () {
+                            Navigator.pushNamed(context, '/forgot-password');
+                          },
+                          child: const Text(
+                            '¿Olvidaste tu contraseña?',
+                            style: TextStyle(color: Colors.black),
+                          ),
+                        ),
                         const SizedBox(height: 16),
-
                         SizedBox(
                           width: double.infinity,
                           height: 56,
