@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';  
- 
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../domain/entities/perfil.dart';
 import '../../domain/entities/deportes.dart';
@@ -28,7 +27,6 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  // Services
   final ProfileService _profileSvc = ProfileServiceSupabase();
   final SportService _sportSvc = SportServiceSupabase();
   final ActivityService _activitySvc = ActivityServiceSupabase();
@@ -38,17 +36,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Profile? _profile;
 
-  // Chips: solo deportes preferidos del usuario
   List<Sport> _sportsPreferred = [];
 
-  // Para rotular cada actividad por su deporte real:
   final Map<String, Sport> _sportById = {};
 
-  // Datos crudos
   List<Activity> _memberRaw = [];
   List<Activity> _createdRaw = [];
 
-  // Procesados (sin filtros de UI)
   List<Activity> _memberUpcoming = [];
   List<Activity> _memberHistory = [];
   List<Activity> _createdUpcoming = [];
@@ -56,15 +50,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   String _trimOrEmpty(String? s) => (s ?? '').trim();
 
-  // ======= Helpers de imágenes =======
-
-  /// URL pública de la imagen del deporte (si existe `image_path`).
   String? _sportPublicUrl(Sport? s) {
     if (s == null) return null;
     final path = s.imagePath?.trim();
     if (path == null || path.isEmpty) return null;
 
-    // Acepta "deportes/futbol.jpg" o "futbol.jpg"
     final clean = path.startsWith('deportes/')
         ? path.replaceFirst('deportes/', '')
         : path;
@@ -75,9 +65,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
         .getPublicUrl(clean);
   }
 
-  /// URL para previsualización de una actividad:
-  /// 1) imagen del deporte si existe,
-  /// 2) si no, null (placeholder).
   String? _previewUrlFor(Activity a) {
     final sport = _sportById[a.sportId];
     return _sportPublicUrl(sport);
@@ -89,11 +76,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _loadAll();
   }
 
-  // ---------- Carga ----------
   Future<void> _loadAll() async {
     setState(() => _loading = true);
     try {
-      // Perfil
       final prof = await _profileSvc.getMyProfile();
       if (prof == null) {
         if (mounted) {
@@ -105,7 +90,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
       }
       _profile = prof;
 
-      // 1) Cargar actividades (miembro + creadas) primero
       final actIds = await _participantSvc.activityIdsByUser(prof.id);
       _memberRaw = actIds.isEmpty
           ? <Activity>[]
@@ -113,13 +97,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
       _createdRaw = await _activitySvc.listByCoordinator(prof.id);
 
-      // 2) Construir el set de TODOS los sportIds que realmente se usan
       final Set<String> sportIdsUsados = {
         ..._memberRaw.map((a) => a.sportId),
         ..._createdRaw.map((a) => a.sportId),
       }..removeWhere((e) => e.isEmpty);
 
-      // 3) Llenar el mapa _sportById con los deportes usados en actividades
       _sportById.clear();
       if (sportIdsUsados.isNotEmpty) {
         final usados = await _sportSvc.listByIds(sportIdsUsados.toList());
@@ -128,14 +110,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
         }
       }
 
-      // 4) Chips: cargar SOLO preferencias del usuario
       if (prof.preferredSportIds.isNotEmpty) {
         _sportsPreferred = await _sportSvc.listByIds(prof.preferredSportIds);
       } else {
         _sportsPreferred = <Sport>[];
       }
 
-      // Procesar (sin filtros de UI, solo estado/fecha actual)
       _splitUpcomingHistory();
     } catch (e) {
       if (mounted) {
@@ -177,7 +157,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _createdHistory = _hist(c);
   }
 
-  // ---------- UI ----------
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context).textTheme;
@@ -190,80 +169,65 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final avatarUrl = _trimOrEmpty(_profile?.avatarUrl);
 
     return Scaffold(
-    appBar: AppBar(
-      automaticallyImplyLeading: false, // 👈 sin flecha de retroceso
-      title: const Text('Perfil'),
-      centerTitle: true,
-      leading: IconButton(
-        tooltip: 'Cerrar sesión',
-        icon: const Icon(Icons.logout),
-        onPressed: () async {
-          final confirmed = await showDialog<bool>(
-            context: context,
-            builder: (ctx) => AlertDialog(
-              title: const Text('Cerrar sesión'),
-              content: const Text('¿Seguro que deseas cerrar tu sesión?'),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(ctx, false),
-                  child: const Text('Cancelar'),
+      appBar: AppBar(
+        automaticallyImplyLeading: false,
+        title: const Text('Perfil'),
+        centerTitle: true,
+        actions: [
+          IconButton(
+            tooltip: 'Cerrar sesión',
+            icon: const Icon(Icons.logout),
+            onPressed: () async {
+              final confirmed = await showDialog<bool>(
+                context: context,
+                builder: (ctx) => AlertDialog(
+                  title: const Text('Cerrar sesión'),
+                  content: const Text('¿Seguro que deseas cerrar tu sesión?'),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(ctx, false),
+                      child: const Text('Cancelar'),
+                    ),
+                    TextButton(
+                      onPressed: () => Navigator.pop(ctx, true),
+                      child: Text(
+                        'Cerrar sesión',
+                        style: TextStyle(
+                          color: const Color(0xFFE53935),
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-                FilledButton(
-                  onPressed: () => Navigator.pop(ctx, true),
-                  child: const Text('Cerrar sesión'),
-                ),
-              ],
-            ),
-          );
+              );
 
-          if (confirmed == true) {
-            try {
-              await Supabase.instance.client.auth.signOut();
-              if (mounted) {
-                Navigator.of(context).pushNamedAndRemoveUntil(
-                  '/login',
-                  (route) => false,
-                );
+              if (confirmed == true) {
+                try {
+                  await Supabase.instance.client.auth.signOut();
+                  if (mounted) {
+                    Navigator.of(context).pushNamedAndRemoveUntil(
+                      '/login',
+                      (route) => false,
+                    );
+                  }
+                } catch (e) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Error al cerrar sesión: $e')),
+                    );
+                  }
+                }
               }
-            } catch (e) {
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Error al cerrar sesión: $e')),
-                );
-              }
-            }
-          }
-        },
+            },
+          ),
+        ],
       ),
-      actions: [
-        IconButton(
-          tooltip: 'Editar perfil',
-          onPressed: () async {
-            final result = await Navigator.pushNamed(
-              context,
-              '/edit-profile',
-              arguments: _profile,
-            );
-            if (result == true) {
-              await _loadAll();
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Perfil actualizado')),
-                );
-              }
-            }
-          },
-          icon: const Icon(Icons.edit_outlined),
-        ),
-      ],
-    ),
-
       body: SafeArea(
         child: RefreshIndicator(
           onRefresh: _loadAll,
           child: CustomScrollView(
             slivers: [
-              // Header
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
@@ -294,9 +258,29 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               style: t.bodyMedium?.copyWith(color: muted),
                             ),
                           ),
+                        const SizedBox(height: 11),
+                        SizedBox(
+                          width: 130,
+                          child:FilledButton(
+                          onPressed: () async {
+                            final result = await Navigator.pushNamed(
+                              context,
+                              '/edit-profile',
+                              arguments: _profile,
+                            );
+                            if (result == true) {
+                              await _loadAll();
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Perfil actualizado')),
+                                );
+                              }
+                            }
+                          },
+                          child: const Text('Editar perfil'),
+                        ),
+                        ),
                         const SizedBox(height: 16),
-
-                        // 🎯 Deportes preferidos del usuario (chips)
                         Align(
                           alignment: Alignment.centerLeft,
                           child: Text(
@@ -340,8 +324,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                 ),
               ),
-
-              // ===== Sección: Miembro =====
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
@@ -351,7 +333,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                 ),
               ),
-
               if (_loading && _memberUpcoming.isEmpty && _memberHistory.isEmpty)
                 const SliverToBoxAdapter(
                   child: Padding(
@@ -401,8 +382,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                   ),
               ],
-
-              // ===== Sección: Coordinas =====
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
@@ -412,7 +391,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                 ),
               ),
-
               if (_loading && _createdUpcoming.isEmpty && _createdHistory.isEmpty)
                 const SliverToBoxAdapter(
                   child: Padding(
@@ -462,7 +440,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                   ),
               ],
-
               const SliverToBoxAdapter(child: SizedBox(height: 16)),
             ],
           ),
@@ -475,7 +452,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  // Tarjeta estilo Explore con categoría = deporte real + emoji
   Widget _activityToCard(Activity a, {String? badge}) {
     final sport = _sportById[a.sportId];
     final emoji = _trimOrEmpty(sport?.iconEmoji);
@@ -489,7 +465,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final place = _trimOrEmpty(a.placeName ?? a.formattedAddress);
     final dt = a.date.toLocal();
 
-    // 👇 imagen: usa la del deporte si existe
     final imageUrl = _previewUrlFor(a);
 
     return _ExploreCard(
@@ -498,7 +473,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       datetime: DateFormat('dd/MM/yyyy, h:mm a').format(dt),
       place: place.isEmpty ? null : place,
       badge: badge,
-      imageUrl: imageUrl, // 👈 nuevo
+      imageUrl: imageUrl,
       onTap: () {
         Navigator.pushNamed(context, '/detail-activity', arguments: a.id);
       },
@@ -531,8 +506,8 @@ class _ExploreCard extends StatelessWidget {
   final String category, title, datetime;
   final String? place;
   final VoidCallback? onTap;
-  final String? badge; // “Miembro” / “Coordinas”
-  final String? imageUrl; // 👈 nuevo
+  final String? badge;
+  final String? imageUrl;
 
   const _ExploreCard({
     required this.category,
@@ -541,7 +516,7 @@ class _ExploreCard extends StatelessWidget {
     this.place,
     this.onTap,
     this.badge,
-    this.imageUrl, // 👈 nuevo
+    this.imageUrl,
   });
 
   @override
@@ -616,13 +591,12 @@ class _ExploreCard extends StatelessWidget {
           padding: const EdgeInsets.all(12),
           child: Row(
             children: [
-              previewBox(), // 👈 imagen del deporte o placeholder
+              previewBox(),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Categoría + badge (si hay)
                     Row(
                       children: [
                         Expanded(
